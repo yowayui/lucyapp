@@ -35,23 +35,6 @@ Download the APK, open it, and allow installation from unknown sources when Andr
 
 The APK ships with an offline catalog of series metadata. Chapter images and pages are fetched from public sources when you open a series or chapter. The app does not host or upload manga content. Titles, images, and chapters belong to their respective owners and sites.
 
-## Build from source
-
-Requirements:
-
-- JDK 21
-- Android SDK 35
-
-```sh
-./gradlew assembleRelease
-```
-
-The APK is written to `app/build/outputs/apk/release/`.
-
-The release variant currently uses the local debug keystore. Replace the `signingConfig` in `app/build.gradle.kts` with your own keystore before publishing builds under your own name.
-
-The offline catalog asset `app/src/main/assets/lucy_catalog.db` is not included because of its size, about 109 MB. The project compiles without it, but catalog screens will have no data at runtime. The published APK already includes this file.
-
 ## Tech stack
 
 - Kotlin and Jetpack Compose with Material 3
@@ -59,18 +42,6 @@ The offline catalog asset `app/src/main/assets/lucy_catalog.db` is not included 
 - OkHttp and Jsoup for source requests and HTML parsing
 - Coil for image loading
 - SQLite for the bundled catalog and local user data
-
-## Project layout
-
-```text
-app/                          Application module
-  src/main/java/app/lucy/     Kotlin sources
-    data/                     Catalog, user database, sources, update worker
-    ui/                       Compose screens, components, and theme
-  src/main/res/               Resources and the bundled Newsreader font
-gradle/                       Gradle wrapper
-build.gradle.kts              Root build script
-```
 
 ## Connect
 
