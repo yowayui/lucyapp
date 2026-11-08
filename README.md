@@ -1,30 +1,76 @@
-# lucy
+<p align="center">
+  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" width="112" alt="lucy app icon">
+</p>
 
-Native Android reader for doujinshi, manga, and manhwa. Built with Kotlin and Jetpack Compose.
+<h1 align="center">lucy</h1>
+
+<p align="center">A minimalist Android reader for doujinshi, manga, and manhwa.</p>
+
+lucy is a native Android app built with Kotlin and Jetpack Compose. It follows the black-and-white look of the lucy web reader and adds an offline catalog, multiple chapter sources, and daily background updates.
 
 ## Download
 
-The signed APK is published on the [Releases](https://github.com/yowayui/lucyapp/releases/latest) page.
+Get the latest signed APK from [Releases](https://github.com/yowayui/lucyapp/releases/latest).
+
+| | |
+|---|---|
+| Version | 1.1.0 |
+| Minimum Android | 7.0 (API 24) |
+| APK size | about 43 MB |
+
+Download the APK, open it, and allow installation from unknown sources when Android asks. The app is distributed outside the Play Store, so Android may show a warning before installing. Newer releases install over the old app as long as the signing key stays the same.
 
 ## Features
 
-- Daily background chapter checks for bookmarked and recently read series
-- Offline catalog with search, browse, and a daily featured selection
-- Reader modes for manga, manhwa, and webtoon
-- Library, reading history, and read markers
-- Light and dark themes
+- **Home**: featured carousel, daily popular ranking, and latest updates in a layout that matches the web reader
+- **Offline catalog**: browse and search about 200,000 series from the bundled catalog, even without a connection
+- **Reader**: webtoon mode with vertical scrolling or paged mode with horizontal swiping, plus automatic next chapter
+- **Library**: bookmarks, reading history, and per-chapter read markers
+- **Daily updates**: background checks for bookmarked and recently read series, with notifications
+- **Settings**: reader mode, theme, background update toggle, manual update check, and social links
+- **Themes**: light and dark, following the system setting by default
+- **No account**: bookmarks, history, and settings stay on the device
 
-## Build
+## About the catalog
 
-Requirements: JDK 21 and Android SDK 35.
+The APK ships with an offline catalog of series metadata. Chapter images and pages are fetched from public sources when you open a series or chapter. The app does not host or upload manga content. Titles, images, and chapters belong to their respective owners and sites.
+
+## Build from source
+
+Requirements:
+
+- JDK 21
+- Android SDK 35
 
 ```sh
 ./gradlew assembleRelease
 ```
 
-The release variant currently uses the local debug keystore. Replace the `signingConfig` in `app/build.gradle.kts` with a private keystore before publishing your own builds.
+The APK is written to `app/build/outputs/apk/release/`.
 
-The offline catalog asset `app/src/main/assets/lucy_catalog.db` is not included because of its size (about 109 MB). The build still succeeds without it, but catalog screens will have no data at runtime. Generate the file before building if you need a working catalog.
+The release variant currently uses the local debug keystore. Replace the `signingConfig` in `app/build.gradle.kts` with your own keystore before publishing builds under your own name.
+
+The offline catalog asset `app/src/main/assets/lucy_catalog.db` is not included because of its size, about 109 MB. The project compiles without it, but catalog screens will have no data at runtime. The published APK already includes this file.
+
+## Tech stack
+
+- Kotlin and Jetpack Compose with Material 3
+- WorkManager for daily background updates
+- OkHttp and Jsoup for source requests and HTML parsing
+- Coil for image loading
+- SQLite for the bundled catalog and local user data
+
+## Project layout
+
+```text
+app/                          Application module
+  src/main/java/app/lucy/     Kotlin sources
+    data/                     Catalog, user database, sources, update worker
+    ui/                       Compose screens, components, and theme
+  src/main/res/               Resources and the bundled Newsreader font
+gradle/                       Gradle wrapper
+build.gradle.kts              Root build script
+```
 
 ## Connect
 
@@ -33,4 +79,4 @@ The offline catalog asset `app/src/main/assets/lucy_catalog.db` is not included 
 
 ## License
 
-MIT
+[MIT](LICENSE)
