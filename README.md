@@ -4,7 +4,7 @@
 
 <h1 align="center">lucy</h1>
 
-<p align="center">A minimalist Android reader for doujinshi, manga, and manhwa.</p>
+<p align="center">A minimalist Android reader for manga and manhwa.</p>
 
 lucy is a native Android app built with Kotlin and Jetpack Compose. It follows the black-and-white look of the lucy web reader and adds an offline catalog, multiple chapter sources, and daily background updates.
 
