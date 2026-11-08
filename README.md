@@ -12,13 +12,9 @@ lucy is a native Android app built with Kotlin and Jetpack Compose. It follows t
 
 Get the latest signed APK from [Releases](https://github.com/yowayui/lucyapp/releases/latest).
 
-| | |
-|---|---|
-| Version | 1.1.0 |
-| Minimum Android | 7.0 (API 24) |
-| APK size | about 43 MB |
+Requirements: Android 7.0 (API 24) or newer.
 
-Download the APK, open it, and allow installation from unknown sources when Android asks. The app is distributed outside the Play Store, so Android may show a warning before installing. Newer releases install over the old app as long as the signing key stays the same.
+Download the APK, open it, and allow installation from unknown sources when Android asks. Newer releases install over the old app as long as the signing key stays the same.
 
 ## Features
 
