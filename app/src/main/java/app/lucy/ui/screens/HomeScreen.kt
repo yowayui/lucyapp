@@ -32,6 +32,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,23 +48,23 @@ fun HomeScreen(
     catalogDb: CatalogDatabase,
     onMangaClick: (String) -> Unit
 ) {
-    var selectedCategory by remember { mutableStateOf("All") }
+    var selectedCategory by remember { mutableStateOf("Manga") }
     var popularList by remember { mutableStateOf<List<MangaItem>>(emptyList()) }
     var latestList by remember { mutableStateOf<List<MangaItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
 
-    val categories = listOf("All", "Manga", "Manhwa", "Doujinshi")
+    val categories = listOf("Manga", "Manhwa", "All")
 
     LaunchedEffect(selectedCategory) {
         loading = true
         withContext(Dispatchers.IO) {
             val pop = when (selectedCategory) {
-                "All" -> catalogDb.getPopular(limit = 15)
-                else -> catalogDb.getByType(selectedCategory, limit = 15)
+                "All" -> catalogDb.getPopular(limit = 15, includeNsfw = false)
+                else -> catalogDb.getByType(selectedCategory, limit = 15, includeNsfw = false)
             }
             val lat = when (selectedCategory) {
-                "All" -> catalogDb.getLatest(limit = 40)
-                else -> catalogDb.getByType(selectedCategory, limit = 40)
+                "All" -> catalogDb.getLatest(limit = 40, includeNsfw = false)
+                else -> catalogDb.getByType(selectedCategory, limit = 40, includeNsfw = false)
             }
             popularList = pop
             latestList = lat
@@ -95,14 +97,17 @@ fun HomeScreen(
             ) {
                 Text(
                     text = "lucy",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.Light,
-                        letterSpacing = (-0.5).sp
+                    fontFamily = FontFamily.Serif,
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontWeight = FontWeight.Normal,
+                        letterSpacing = (-1).sp
                     ),
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
                     text = "reader",
+                    fontFamily = FontFamily.Serif,
+                    fontStyle = FontStyle.Italic,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

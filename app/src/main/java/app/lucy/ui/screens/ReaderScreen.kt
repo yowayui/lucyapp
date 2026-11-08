@@ -73,12 +73,16 @@ fun ReaderScreen(
             val series = catalogDb.getBySlug(seriesSlug)
             val title = series?.title ?: seriesSlug
             val eng = series?.englishName
+            val nat = series?.nativeName
+            val mtype = series?.type ?: "Manga"
             val group = series?.sourceGroup ?: "AllManga"
 
             val imgs = ChapterLoader.loadChapter(
                 group = group,
+                type = mtype,
                 seriesTitle = title,
                 englishName = eng,
+                nativeName = nat,
                 chapterNum = chapterNum,
                 chapterSlug = chapterSlug
             )

@@ -11,8 +11,12 @@ import java.util.concurrent.TimeUnit
 
 object NetworkClient {
     private val MDX_IP = InetAddress.getByName("45.129.229.1")
+    private val MP_IPS = listOf(
+        InetAddress.getByName("104.21.5.54"),
+        InetAddress.getByName("172.67.133.1")
+    )
 
-    // Custom DNS that resolves MangaDex hosts directly to their legitimate IP
+    // Custom DNS that resolves MangaDex & MangaPill hosts directly to legitimate IPs
     // bypassing ISP DNS hijacking/blocking
     val customDns = object : Dns {
         override fun lookup(hostname: String): List<InetAddress> {
@@ -20,6 +24,8 @@ object NetworkClient {
                 hostname.equals("uploads.mangadex.org", ignoreCase = true)
             ) {
                 listOf(MDX_IP)
+            } else if (hostname.equals("mangapill.com", ignoreCase = true)) {
+                MP_IPS
             } else {
                 Dns.SYSTEM.lookup(hostname)
             }
@@ -36,8 +42,10 @@ object NetworkClient {
             val builder = req.newBuilder()
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
-            if (host.contains("mangapill")) {
+            if (host.contains("mangapill") || host.contains("readdetectiveconan") || host.contains("mangap")) {
                 builder.header("Referer", "https://mangapill.com/")
+            } else if (host.contains("manhwatop")) {
+                builder.header("Referer", "https://manhwatop.com/")
             } else if (host.contains("mangadex")) {
                 builder.header("Referer", "https://mangadex.org/")
             } else if (host.contains("dojing")) {
@@ -59,17 +67,17 @@ object TitleMatcher {
             .trim('-')
     }
 
-    // Strict matching rule: prevents serving completely wrong manga
     fun titlesMatch(query: String, candidate: String): Boolean {
         val qSlug = slugify(query)
         val cSlug = slugify(candidate)
         if (qSlug.isBlank() || cSlug.isBlank()) return false
         if (qSlug == cSlug) return true
 
-        val qParts = qSlug.split("-")
-        val cParts = cSlug.split("-")
-        if (qSlug.startsWith("$cSlug-") && cParts.size >= 3) return true
-        if (cSlug.startsWith("$qSlug-") && qParts.size >= 3) return true
+        val qParts = qSlug.split("-").filter { it.isNotBlank() }
+        val cParts = cSlug.split("-").filter { it.isNotBlank() }
+
+        if (qParts.size >= 2 && cSlug.contains(qSlug)) return true
+        if (cParts.size >= 2 && qSlug.contains(cSlug)) return true
 
         return false
     }
@@ -81,25 +89,30 @@ object MangaPillSource {
         val searchUrl = "https://mangapill.com/search?q=$encodedQuery"
 
         val searchReq = Request.Builder().url(searchUrl).build()
-        val searchHtml = NetworkClient.okHttp.newCall(searchReq).execute().use { it.body?.string().orEmpty() }
+        val searchHtml = runCatching {
+            NetworkClient.okHttp.newCall(searchReq).execute().use { it.body?.string().orEmpty() }
+        }.getOrNull() ?: return emptyList()
+
         val doc = Jsoup.parse(searchHtml, searchUrl)
 
         var matchedMangaUrl: String? = null
-        val items = doc.select(".grid > div, .my-3.border-b")
-        for (item in items) {
-            val titleElem = item.select("a.line-clamp-2, a.font-bold, a.text-secondary").first() ?: continue
-            val candidateTitle = titleElem.text()
-            if (TitleMatcher.titlesMatch(seriesTitle, candidateTitle)) {
-                matchedMangaUrl = titleElem.absUrl("href")
+        val mangaLinks = doc.select("a[href^='/manga/'], a[href*='/manga/']")
+        for (link in mangaLinks) {
+            val candidateTitle = link.text()
+            val slugFromHref = link.attr("href").substringAfterLast("/")
+            if (candidateTitle.isNotBlank() && (TitleMatcher.titlesMatch(seriesTitle, candidateTitle) || TitleMatcher.titlesMatch(seriesTitle, slugFromHref))) {
+                matchedMangaUrl = link.absUrl("href")
                 break
             }
         }
 
         if (matchedMangaUrl.isNullOrBlank()) return emptyList()
 
-        // Fetch manga page to find chapters
         val mangaReq = Request.Builder().url(matchedMangaUrl).build()
-        val mangaHtml = NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
+        val mangaHtml = runCatching {
+            NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
+        }.getOrNull() ?: return emptyList()
+
         val mangaDoc = Jsoup.parse(mangaHtml, matchedMangaUrl)
 
         var targetChapterUrl: String? = null
@@ -108,25 +121,122 @@ object MangaPillSource {
 
         for (link in chapterLinks) {
             val text = link.text()
-            val match = Regex("Chapter\\s+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find(text)
-            if (match != null && match.groupValues[1] == targetNum) {
-                targetChapterUrl = link.absUrl("href")
-                break
+            val href = link.attr("href")
+            val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $href")
+            if (match != null) {
+                val foundNum = match.groupValues[1]
+                if (foundNum == targetNum || foundNum.toFloatOrNull() == targetNum.toFloatOrNull()) {
+                    targetChapterUrl = link.absUrl("href")
+                    break
+                }
             }
         }
 
         if (targetChapterUrl.isNullOrBlank()) return emptyList()
 
-        // Fetch chapter reader page
         val chapterReq = Request.Builder().url(targetChapterUrl).build()
-        val chapterHtml = NetworkClient.okHttp.newCall(chapterReq).execute().use { it.body?.string().orEmpty() }
-        val chapterDoc = Jsoup.parse(chapterHtml, targetChapterUrl)
+        val chapterHtml = runCatching {
+            NetworkClient.okHttp.newCall(chapterReq).execute().use { it.body?.string().orEmpty() }
+        }.getOrNull() ?: return emptyList()
 
+        val chapterDoc = Jsoup.parse(chapterHtml, targetChapterUrl)
         val images = mutableListOf<String>()
-        val imgElements = chapterDoc.select("picture img, div[data-controller='viewer'] img, img.js-page")
+        val imgElements = chapterDoc.select("img.js-page, picture img, div[data-controller='viewer'] img, #viewer img, img[data-src]")
         for (img in imgElements) {
-            val src = img.attr("data-src").ifBlank { img.attr("src") }
-            if (src.isNotBlank() && !src.contains("placeholder") && !src.contains("logo")) {
+            val src = img.attr("data-src").ifBlank { img.attr("src") }.trim()
+            if (src.isNotBlank() && !src.contains("placeholder") && !src.contains("logo") && !src.contains("favicon")) {
+                images.add(src)
+            }
+        }
+        return images
+    }
+}
+
+object ManhwaSource {
+    fun fetchChapterImages(seriesTitle: String, chapterNum: String): List<String> {
+        val encodedQuery = URLEncoder.encode(seriesTitle, "UTF-8")
+        val searchUrl = "https://manhwatop.com/?s=$encodedQuery&post_type=wp-manga"
+
+        val searchReq = Request.Builder().url(searchUrl).build()
+        val searchHtml = runCatching {
+            NetworkClient.okHttp.newCall(searchReq).execute().use { it.body?.string().orEmpty() }
+        }.getOrNull() ?: return emptyList()
+
+        val doc = Jsoup.parse(searchHtml, searchUrl)
+        val mangaLinks = doc.select(".c-tabs-item__content a[href*='/manga/'], .post-title a[href*='/manga/'], a[href*='/manga/']")
+        var matchedMangaUrl: String? = null
+
+        for (link in mangaLinks) {
+            val href = link.absUrl("href").trimEnd('/')
+            if (href.contains("/chapter")) continue
+            val candidateTitle = link.text()
+            val slugFromHref = href.substringAfterLast("/")
+            if (candidateTitle.isNotBlank() && (TitleMatcher.titlesMatch(seriesTitle, candidateTitle) || TitleMatcher.titlesMatch(seriesTitle, slugFromHref))) {
+                matchedMangaUrl = href
+                break
+            }
+        }
+
+        // Fallback to first non-chapter manga link
+        if (matchedMangaUrl.isNullOrBlank()) {
+            for (link in mangaLinks) {
+                val href = link.absUrl("href").trimEnd('/')
+                if (!href.contains("/chapter") && href.contains("/manga/")) {
+                    matchedMangaUrl = href
+                    break
+                }
+            }
+        }
+
+        if (matchedMangaUrl.isNullOrBlank()) return emptyList()
+
+        val cleanChNum = chapterNum.trim()
+        val targetChapterUrl = "$matchedMangaUrl/chapter-$cleanChNum/"
+
+        var chapterReq = Request.Builder().url(targetChapterUrl).build()
+        var chapterHtml = runCatching {
+            NetworkClient.okHttp.newCall(chapterReq).execute().use { res ->
+                if (res.isSuccessful) res.body?.string().orEmpty() else ""
+            }
+        }.getOrNull().orEmpty()
+
+        // Fallback to manga page to extract chapter link if direct URL didn't resolve
+        if (chapterHtml.isBlank()) {
+            val mangaReq = Request.Builder().url(matchedMangaUrl).build()
+            val mangaHtml = runCatching {
+                NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
+            }.getOrNull().orEmpty()
+
+            if (mangaHtml.isNotBlank()) {
+                val mangaDoc = Jsoup.parse(mangaHtml, matchedMangaUrl)
+                val chLinks = mangaDoc.select(".wp-manga-chapter a, a[href*='/chapter-']")
+                for (link in chLinks) {
+                    val text = link.text()
+                    val href = link.attr("href")
+                    val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $href")
+                    if (match != null) {
+                        val num = match.groupValues[1]
+                        if (num == cleanChNum || num.toFloatOrNull() == cleanChNum.toFloatOrNull()) {
+                            val resolvedUrl = link.absUrl("href")
+                            chapterReq = Request.Builder().url(resolvedUrl).build()
+                            chapterHtml = runCatching {
+                                NetworkClient.okHttp.newCall(chapterReq).execute().use { it.body?.string().orEmpty() }
+                            }.getOrNull().orEmpty()
+                            break
+                        }
+                    }
+                }
+            }
+        }
+
+        if (chapterHtml.isBlank()) return emptyList()
+
+        val chapterDoc = Jsoup.parse(chapterHtml, targetChapterUrl)
+        val images = mutableListOf<String>()
+        val imgElements = chapterDoc.select(".reading-content img, #readerarea img, .entry-content img, img[src*='manga_']")
+        for (img in imgElements) {
+            val src = img.attr("data-src").ifBlank { img.attr("src") }.trim()
+            if (src.isNotBlank() && !src.contains("LOGO") && !src.contains("wp-content/uploads") && !src.contains("placeholder")) {
                 images.add(src)
             }
         }
@@ -140,10 +250,13 @@ object MangaDexSource {
         val searchUrl = "https://api.mangadex.org/manga?title=$encodedTitle&limit=10&order[relevance]=desc"
 
         val searchReq = Request.Builder().url(searchUrl).build()
-        val searchJsonStr = NetworkClient.okHttp.newCall(searchReq).execute().use { it.body?.string().orEmpty() }
+        val searchJsonStr = runCatching {
+            NetworkClient.okHttp.newCall(searchReq).execute().use { it.body?.string().orEmpty() }
+        }.getOrNull() ?: return emptyList()
+
         if (searchJsonStr.isBlank()) return emptyList()
 
-        val searchJson = JSONObject(searchJsonStr)
+        val searchJson = runCatching { JSONObject(searchJsonStr) }.getOrNull() ?: return emptyList()
         val dataArray = searchJson.optJSONArray("data") ?: return emptyList()
 
         var matchedMangaId: String? = null
@@ -176,15 +289,18 @@ object MangaDexSource {
 
         if (matchedMangaId.isNullOrBlank()) return emptyList()
 
-        // Fast path: check aggregate endpoint for the chapter UUID
-        val aggUrl = "https://api.mangadex.org/manga/$matchedMangaId/aggregate?translatedLanguage[]=en"
+        // 1. Try aggregate endpoint
+        val aggUrl = "https://api.mangadex.org/manga/$matchedMangaId/aggregate"
         val aggReq = Request.Builder().url(aggUrl).build()
-        val aggJsonStr = NetworkClient.okHttp.newCall(aggReq).execute().use { it.body?.string().orEmpty() }
+        val aggJsonStr = runCatching {
+            NetworkClient.okHttp.newCall(aggReq).execute().use { it.body?.string().orEmpty() }
+        }.getOrNull().orEmpty()
+
         var chapterUuid: String? = null
 
         if (aggJsonStr.isNotBlank()) {
-            val aggJson = JSONObject(aggJsonStr)
-            val vols = aggJson.optJSONObject("volumes")
+            val aggJson = runCatching { JSONObject(aggJsonStr) }.getOrNull()
+            val vols = aggJson?.optJSONObject("volumes")
             if (vols != null) {
                 val volKeys = vols.keys()
                 while (volKeys.hasNext()) {
@@ -198,20 +314,46 @@ object MangaDexSource {
             }
         }
 
+        // 2. Fallback to feed search
+        if (chapterUuid.isNullOrBlank()) {
+            val feedUrl = "https://api.mangadex.org/manga/$matchedMangaId/feed?limit=100&order[chapter]=desc"
+            val feedReq = Request.Builder().url(feedUrl).build()
+            val feedStr = runCatching {
+                NetworkClient.okHttp.newCall(feedReq).execute().use { it.body?.string().orEmpty() }
+            }.getOrNull().orEmpty()
+
+            if (feedStr.isNotBlank()) {
+                val feedJson = runCatching { JSONObject(feedStr) }.getOrNull()
+                val feedData = feedJson?.optJSONArray("data")
+                if (feedData != null) {
+                    for (i in 0 until feedData.length()) {
+                        val chObj = feedData.getJSONObject(i)
+                        val chAttrs = chObj.getJSONObject("attributes")
+                        val chNum = chAttrs.optString("chapter")
+                        val pages = chAttrs.optInt("pages", 0)
+                        if (chNum == chapterNum && pages > 0) {
+                            chapterUuid = chObj.getString("id")
+                            break
+                        }
+                    }
+                }
+            }
+        }
+
         if (chapterUuid.isNullOrBlank()) return emptyList()
 
-        // Fetch /at-home/server/{id}
         val atHomeUrl = "https://api.mangadex.org/at-home/server/$chapterUuid"
         val atHomeReq = Request.Builder().url(atHomeUrl).build()
-        val atHomeStr = NetworkClient.okHttp.newCall(atHomeReq).execute().use { it.body?.string().orEmpty() }
+        val atHomeStr = runCatching {
+            NetworkClient.okHttp.newCall(atHomeReq).execute().use { it.body?.string().orEmpty() }
+        }.getOrNull().orEmpty()
         if (atHomeStr.isBlank()) return emptyList()
 
-        val atHomeJson = JSONObject(atHomeStr)
+        val atHomeJson = runCatching { JSONObject(atHomeStr) }.getOrNull() ?: return emptyList()
         val baseUrl = atHomeJson.optString("baseUrl")
         val chapterData = atHomeJson.optJSONObject("chapter") ?: return emptyList()
         val hash = chapterData.optString("hash")
 
-        // Prefer data-saver files for quick mobile rendering
         val dataSaverFiles = chapterData.optJSONArray("dataSaver")
         val regularFiles = chapterData.optJSONArray("data")
 
@@ -264,8 +406,10 @@ object ShiroSource {
 object ChapterLoader {
     fun loadChapter(
         group: String,
+        type: String,
         seriesTitle: String,
         englishName: String?,
+        nativeName: String?,
         chapterNum: String,
         chapterSlug: String
     ): List<String> {
@@ -281,17 +425,35 @@ object ChapterLoader {
             if (!imgs.isNullOrEmpty()) return imgs
         }
 
-        // 3. MangaPill (try main title, then english name)
-        val titlesToTry = listOfNotNull(seriesTitle, englishName).distinct()
-        for (title in titlesToTry) {
-            val mpImages = runCatching { MangaPillSource.fetchChapterImages(title, chapterNum) }.getOrNull()
-            if (!mpImages.isNullOrEmpty()) return mpImages
-        }
+        val titlesToTry = listOfNotNull(englishName, seriesTitle, nativeName).distinct()
+        val isManhwa = type.equals("Manhwa", ignoreCase = true)
 
-        // 4. MangaDex fallback with strict title match
-        for (title in titlesToTry) {
-            val mdxImages = runCatching { MangaDexSource.fetchChapterImages(title, chapterNum) }.getOrNull()
-            if (!mdxImages.isNullOrEmpty()) return mdxImages
+        if (isManhwa) {
+            for (title in titlesToTry) {
+                val mwImages = runCatching { ManhwaSource.fetchChapterImages(title, chapterNum) }.getOrNull()
+                if (!mwImages.isNullOrEmpty()) return mwImages
+            }
+            for (title in titlesToTry) {
+                val mdxImages = runCatching { MangaDexSource.fetchChapterImages(title, chapterNum) }.getOrNull()
+                if (!mdxImages.isNullOrEmpty()) return mdxImages
+            }
+            for (title in titlesToTry) {
+                val mpImages = runCatching { MangaPillSource.fetchChapterImages(title, chapterNum) }.getOrNull()
+                if (!mpImages.isNullOrEmpty()) return mpImages
+            }
+        } else {
+            for (title in titlesToTry) {
+                val mpImages = runCatching { MangaPillSource.fetchChapterImages(title, chapterNum) }.getOrNull()
+                if (!mpImages.isNullOrEmpty()) return mpImages
+            }
+            for (title in titlesToTry) {
+                val mdxImages = runCatching { MangaDexSource.fetchChapterImages(title, chapterNum) }.getOrNull()
+                if (!mdxImages.isNullOrEmpty()) return mdxImages
+            }
+            for (title in titlesToTry) {
+                val mwImages = runCatching { ManhwaSource.fetchChapterImages(title, chapterNum) }.getOrNull()
+                if (!mwImages.isNullOrEmpty()) return mwImages
+            }
         }
 
         return emptyList()
