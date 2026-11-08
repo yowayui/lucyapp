@@ -199,6 +199,10 @@ class UserDatabase(context: Context) : SQLiteOpenHelper(context, "user_data.db",
         writableDatabase.delete("history", null, null)
     }
 
+    fun deleteHistory(slug: String) {
+        writableDatabase.delete("history", "slug = ?", arrayOf(slug))
+    }
+
     fun clearReadChapters() {
         writableDatabase.delete("read_chapters", null, null)
     }
@@ -266,6 +270,62 @@ class UserDatabase(context: Context) : SQLiteOpenHelper(context, "user_data.db",
     }
 
     // --- Extra / Live Chapters ---
+    fun cleanBogusExtraChapters(seriesSlug: String, maxValidChapterNumber: Float) {
+        if (maxValidChapterNumber <= 0f) return
+        writableDatabase.execSQL(
+            "CREATE TABLE IF NOT EXISTS extra_chapters (series_slug TEXT NOT NULL, slug TEXT NOT NULL, number TEXT NOT NULL, title TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (series_slug, slug));"
+        )
+        val maxAllowed = maxValidChapterNumber + 50f
+        val toDelete = mutableListOf<String>()
+        readableDatabase.rawQuery(
+            "SELECT slug, number FROM extra_chapters WHERE series_slug = ?",
+            arrayOf(seriesSlug)
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val chSlug = cursor.getString(0)
+                val num = cursor.getString(1).toFloatOrNull()
+                if (num == null || num > maxAllowed) {
+                    toDelete.add(chSlug)
+                }
+            }
+        }
+        if (toDelete.isNotEmpty()) {
+            writableDatabase.beginTransaction()
+            try {
+                for (delSlug in toDelete) {
+                    writableDatabase.delete("extra_chapters", "series_slug = ? AND slug = ?", arrayOf(seriesSlug, delSlug))
+                }
+                writableDatabase.setTransactionSuccessful()
+            } finally {
+                writableDatabase.endTransaction()
+            }
+        }
+    }
+
+    fun replaceExtraChapters(seriesSlug: String, chapters: List<Chapter>) {
+        writableDatabase.execSQL(
+            "CREATE TABLE IF NOT EXISTS extra_chapters (series_slug TEXT NOT NULL, slug TEXT NOT NULL, number TEXT NOT NULL, title TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (series_slug, slug));"
+        )
+        writableDatabase.beginTransaction()
+        try {
+            writableDatabase.delete("extra_chapters", "series_slug = ?", arrayOf(seriesSlug))
+            val now = System.currentTimeMillis()
+            for (ch in chapters) {
+                val cv = ContentValues().apply {
+                    put("series_slug", seriesSlug)
+                    put("slug", ch.slug)
+                    put("number", ch.number)
+                    put("title", ch.title)
+                    put("created_at", now)
+                }
+                writableDatabase.insertWithOnConflict("extra_chapters", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+            }
+            writableDatabase.setTransactionSuccessful()
+        } finally {
+            writableDatabase.endTransaction()
+        }
+    }
+
     fun saveExtraChapters(seriesSlug: String, chapters: List<Chapter>) {
         if (chapters.isEmpty()) return
         writableDatabase.execSQL(

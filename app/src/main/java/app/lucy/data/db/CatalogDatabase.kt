@@ -159,9 +159,49 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
         return pool.subList(offset, offset + limit)
     }
 
+    fun getBrowse(
+        type: String? = null,
+        genre: String? = null,
+        limit: Int = 60,
+        offset: Int = 0,
+        includeNsfw: Boolean = false
+    ): List<MangaItem> {
+        val conditions = mutableListOf<String>()
+        val args = mutableListOf<String>()
+
+        conditions.add("thumb IS NOT NULL AND thumb != ''")
+
+        if (!type.isNullOrBlank() && !type.equals("All", ignoreCase = true)) {
+            conditions.add("type = ? COLLATE NOCASE")
+            args.add(type)
+        }
+
+        if (!genre.isNullOrBlank() && !genre.equals("All", ignoreCase = true)) {
+            conditions.add("genres LIKE ?")
+            args.add("%$genre%")
+        }
+
+        if (!includeNsfw) {
+            conditions.add("is_nsfw = 0 AND type != 'Doujinshi'")
+        }
+
+        val whereClause = "WHERE " + conditions.joinToString(" AND ")
+        val sql = "SELECT * FROM catalog $whereClause ORDER BY score DESC LIMIT ? OFFSET ?"
+        args.add(limit.toString())
+        args.add(offset.toString())
+
+        val list = mutableListOf<MangaItem>()
+        db.rawQuery(sql, args.toTypedArray()).use { cursor ->
+            while (cursor.moveToNext()) {
+                list.add(mapRow(cursor))
+            }
+        }
+        return list
+    }
+
     fun getPopular(limit: Int = 40, offset: Int = 0, includeNsfw: Boolean = false): List<MangaItem> {
-        val nsfwClause = if (!includeNsfw) "WHERE is_nsfw = 0 AND type != 'Doujinshi'" else ""
-        val sql = "SELECT * FROM catalog $nsfwClause ORDER BY score DESC LIMIT ? OFFSET ?"
+        val nsfwClause = if (!includeNsfw) "AND is_nsfw = 0 AND type != 'Doujinshi'" else ""
+        val sql = "SELECT * FROM catalog WHERE thumb IS NOT NULL AND thumb != '' $nsfwClause ORDER BY score DESC LIMIT ? OFFSET ?"
         val list = mutableListOf<MangaItem>()
         db.rawQuery(sql, arrayOf(limit.toString(), offset.toString())).use { cursor ->
             while (cursor.moveToNext()) {
@@ -172,8 +212,8 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
     }
 
     fun getLatest(limit: Int = 40, offset: Int = 0, includeNsfw: Boolean = false): List<MangaItem> {
-        val nsfwClause = if (!includeNsfw) "WHERE is_nsfw = 0 AND type != 'Doujinshi'" else ""
-        val sql = "SELECT * FROM catalog $nsfwClause ORDER BY rowid DESC LIMIT ? OFFSET ?"
+        val nsfwClause = if (!includeNsfw) "AND is_nsfw = 0 AND type != 'Doujinshi'" else ""
+        val sql = "SELECT * FROM catalog WHERE thumb IS NOT NULL AND thumb != '' $nsfwClause ORDER BY rowid DESC LIMIT ? OFFSET ?"
         val list = mutableListOf<MangaItem>()
         db.rawQuery(sql, arrayOf(limit.toString(), offset.toString())).use { cursor ->
             while (cursor.moveToNext()) {
@@ -185,7 +225,7 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
 
     fun getByType(type: String, limit: Int = 40, offset: Int = 0, includeNsfw: Boolean = false): List<MangaItem> {
         val nsfwClause = if (!includeNsfw && !type.equals("Doujinshi", ignoreCase = true)) "AND is_nsfw = 0" else ""
-        val sql = "SELECT * FROM catalog WHERE type = ? COLLATE NOCASE $nsfwClause ORDER BY score DESC LIMIT ? OFFSET ?"
+        val sql = "SELECT * FROM catalog WHERE type = ? COLLATE NOCASE AND thumb IS NOT NULL AND thumb != '' $nsfwClause ORDER BY score DESC LIMIT ? OFFSET ?"
         val list = mutableListOf<MangaItem>()
         db.rawQuery(sql, arrayOf(type, limit.toString(), offset.toString())).use { cursor ->
             while (cursor.moveToNext()) {
@@ -197,7 +237,7 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
 
     fun getByGenre(genre: String, limit: Int = 40, offset: Int = 0, includeNsfw: Boolean = true): List<MangaItem> {
         val nsfwClause = if (!includeNsfw) "AND is_nsfw = 0" else ""
-        val sql = "SELECT * FROM catalog WHERE genres LIKE ? $nsfwClause ORDER BY score DESC LIMIT ? OFFSET ?"
+        val sql = "SELECT * FROM catalog WHERE genres LIKE ? AND thumb IS NOT NULL AND thumb != '' $nsfwClause ORDER BY score DESC LIMIT ? OFFSET ?"
         val list = mutableListOf<MangaItem>()
         db.rawQuery(sql, arrayOf("%$genre%", limit.toString(), offset.toString())).use { cursor ->
             while (cursor.moveToNext()) {
@@ -220,7 +260,7 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
             SELECT c.* FROM catalog c
             JOIN catalog_fts fts ON c.slug = fts.slug
             WHERE catalog_fts MATCH ? $nsfwClause
-            ORDER BY c.score DESC
+            ORDER BY (c.thumb IS NOT NULL AND c.thumb != '') DESC, c.score DESC
             LIMIT ?
         """.trimIndent()
 
@@ -233,14 +273,14 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
             }
         } catch (e: Exception) {
             // Fallback to simple LIKE query if FTS expression has syntax quirk
-            val fallbackSql = "SELECT * FROM catalog WHERE (title LIKE ? OR english_name LIKE ? OR native_name LIKE ?) $nsfwClause ORDER BY score DESC LIMIT ?"
+            val fallbackSql = "SELECT * FROM catalog WHERE (title LIKE ? OR english_name LIKE ? OR native_name LIKE ?) $nsfwClause ORDER BY (thumb IS NOT NULL AND thumb != '') DESC, score DESC LIMIT ?"
             db.rawQuery(fallbackSql, arrayOf("%$query%", "%$query%", "%$query%", limit.toString())).use { cursor ->
                 while (cursor.moveToNext()) {
                     list.add(mapRow(cursor))
                 }
             }
         }
-        return list
+        return list.distinctBy { it.slug }
     }
 
     fun getBySlug(slug: String): MangaItem? {

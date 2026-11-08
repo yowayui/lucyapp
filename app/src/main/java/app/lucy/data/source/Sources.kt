@@ -4,6 +4,7 @@ import app.lucy.data.model.Chapter
 import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import java.net.InetAddress
@@ -235,9 +236,10 @@ object MangaPillSource {
         val chapterLinks = mangaDoc.select("#chapters a, div.chapters-container a, a[href*='/chapters/']")
         val seen = mutableSetOf<String>()
         for (link in chapterLinks) {
+            val absHref = link.absUrl("href")
+            if (!absHref.contains("/chapters/")) continue
             val text = link.text()
-            val href = link.attr("href")
-            val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $href")
+            val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $absHref")
             if (match != null) {
                 val num = match.groupValues[1]
                 if (seen.add(num)) {
@@ -305,23 +307,35 @@ object ManhwaSource {
 
         // Fallback to manga page to extract chapter link if direct URL didn't resolve
         if (chapterHtml.isBlank()) {
-            val mangaReq = Request.Builder().url(matchedMangaUrl).build()
-            val mangaHtml = runCatching {
-                NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
+            val baseMangaUrl = matchedMangaUrl.trimEnd('/')
+            val ajaxReq = Request.Builder()
+                .url("$baseMangaUrl/ajax/chapters/")
+                .post(ByteArray(0).toRequestBody())
+                .header("Referer", "$baseMangaUrl/")
+                .build()
+            var ajaxHtml = runCatching {
+                NetworkClient.okHttp.newCall(ajaxReq).execute().use { it.body?.string().orEmpty() }
             }.getOrNull().orEmpty()
 
-            if (mangaHtml.isNotBlank()) {
-                val mangaDoc = Jsoup.parse(mangaHtml, matchedMangaUrl)
-                val chLinks = mangaDoc.select(".wp-manga-chapter a, a[href*='/chapter-']")
+            if (ajaxHtml.isBlank()) {
+                val mangaReq = Request.Builder().url(baseMangaUrl).build()
+                ajaxHtml = runCatching {
+                    NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
+                }.getOrNull().orEmpty()
+            }
+
+            if (ajaxHtml.isNotBlank()) {
+                val mangaDoc = Jsoup.parse(ajaxHtml, baseMangaUrl)
+                val chLinks = mangaDoc.select(".wp-manga-chapter a, #manga-chapters-holder a, li.sub-chap a")
                 for (link in chLinks) {
+                    val absHref = link.absUrl("href").trimEnd('/')
+                    if (!absHref.startsWith(baseMangaUrl, ignoreCase = true)) continue
                     val text = link.text()
-                    val href = link.attr("href")
-                    val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $href")
+                    val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $absHref")
                     if (match != null) {
                         val num = match.groupValues[1]
                         if (num == cleanChNum || num.toFloatOrNull() == cleanChNum.toFloatOrNull()) {
-                            val resolvedUrl = link.absUrl("href")
-                            chapterReq = Request.Builder().url(resolvedUrl).build()
+                            chapterReq = Request.Builder().url(absHref).build()
                             chapterHtml = runCatching {
                                 NetworkClient.okHttp.newCall(chapterReq).execute().use { it.body?.string().orEmpty() }
                             }.getOrNull().orEmpty()
@@ -371,22 +385,36 @@ object ManhwaSource {
         }
 
         if (matchedMangaUrl.isNullOrBlank()) return emptyList()
+        val baseMangaUrl = matchedMangaUrl.trimEnd('/')
 
-        val mangaReq = Request.Builder().url(matchedMangaUrl).build()
-        val mangaHtml = runCatching {
-            NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
+        val ajaxReq = Request.Builder()
+            .url("$baseMangaUrl/ajax/chapters/")
+            .post(ByteArray(0).toRequestBody())
+            .header("Referer", "$baseMangaUrl/")
+            .build()
+        var chaptersHtml = runCatching {
+            NetworkClient.okHttp.newCall(ajaxReq).execute().use { it.body?.string().orEmpty() }
         }.getOrNull().orEmpty()
 
-        if (mangaHtml.isBlank()) return emptyList()
+        if (chaptersHtml.isBlank()) {
+            val mangaReq = Request.Builder().url(baseMangaUrl).build()
+            chaptersHtml = runCatching {
+                NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
+            }.getOrNull().orEmpty()
+        }
 
-        val mangaDoc = Jsoup.parse(mangaHtml, matchedMangaUrl)
-        val chLinks = mangaDoc.select(".wp-manga-chapter a, a[href*='/chapter-']")
+        if (chaptersHtml.isBlank()) return emptyList()
+
+        val mangaDoc = Jsoup.parse(chaptersHtml, baseMangaUrl)
+        val chLinks = mangaDoc.select(".wp-manga-chapter a, #manga-chapters-holder a, li.sub-chap a")
         val chapters = mutableListOf<Chapter>()
         val seen = mutableSetOf<String>()
         for (link in chLinks) {
+            val absHref = link.absUrl("href").trimEnd('/')
+            if (!absHref.startsWith(baseMangaUrl, ignoreCase = true)) continue
+
             val text = link.text()
-            val href = link.attr("href")
-            val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $href")
+            val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $absHref")
             if (match != null) {
                 val num = match.groupValues[1]
                 if (seen.add(num)) {

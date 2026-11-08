@@ -18,12 +18,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.lucy.data.model.MangaItem
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 
 @Composable
 fun MangaCard(
@@ -43,26 +45,25 @@ fun MangaCard(
                 .aspectRatio(0.72f)
                 .clip(RoundedCornerShape(6.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                .border(0.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
+                .border(0.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp)),
+            contentAlignment = Alignment.Center
         ) {
+            Text(
+                text = manga.title.take(1).uppercase(),
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            )
+
             if (!manga.thumb.isNullOrBlank()) {
                 AsyncImage(
-                    model = manga.thumb,
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(manga.thumb)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = manga.title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
-            } else {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = manga.title.take(1).uppercase(),
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
-                }
             }
 
             // Top-left badge: Rank (if present) or Type

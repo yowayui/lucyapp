@@ -70,6 +70,7 @@ import app.lucy.data.db.UserDatabase
 import app.lucy.data.model.Chapter
 import app.lucy.data.source.ChapterLoader
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -97,6 +98,7 @@ fun ReaderScreen(
     var images by remember { mutableStateOf<List<String>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var reloadCount by remember { mutableIntStateOf(0) }
     var showControls by remember { mutableStateOf(true) }
     var showChapterSheet by remember { mutableStateOf(false) }
 
@@ -146,7 +148,7 @@ fun ReaderScreen(
     }
 
     // Load active chapter images
-    LaunchedEffect(currentSlug) {
+    LaunchedEffect(currentSlug, reloadCount) {
         loading = true
         errorMessage = null
         withContext(Dispatchers.IO) {
@@ -303,21 +305,37 @@ fun ReaderScreen(
             }
         } else if (errorMessage != null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(24.dp)
+                ) {
                     Text(
                         text = errorMessage!!,
                         color = Color.White.copy(alpha = 0.8f),
                         fontSize = 14.sp
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = onBackClick,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.White.copy(alpha = 0.2f),
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Text("Back to Series")
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(
+                            onClick = { reloadCount++ },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Retry", fontWeight = FontWeight.Bold)
+                        }
+                        Button(
+                            onClick = onBackClick,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White.copy(alpha = 0.2f),
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Back to Series")
+                        }
                     }
                 }
             }
@@ -336,7 +354,10 @@ fun ReaderScreen(
             ) {
                 itemsIndexed(images) { _, imgUrl ->
                     AsyncImage(
-                        model = imgUrl,
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(imgUrl)
+                            .crossfade(true)
+                            .build(),
                         contentDescription = "Page",
                         contentScale = ContentScale.FillWidth,
                         modifier = Modifier.fillMaxWidth()
@@ -402,7 +423,10 @@ fun ReaderScreen(
             ) { page ->
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     AsyncImage(
-                        model = images[page],
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(images[page])
+                            .crossfade(true)
+                            .build(),
                         contentDescription = "Page ${page + 1}",
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize()

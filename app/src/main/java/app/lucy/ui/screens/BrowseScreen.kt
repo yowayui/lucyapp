@@ -46,33 +46,40 @@ fun BrowseScreen(
     catalogDb: CatalogDatabase,
     onMangaClick: (String) -> Unit
 ) {
+    val types = listOf("All", "Manga", "Manhwa", "Manhua")
     val genres = listOf(
-        "Action", "Adventure", "Comedy", "Drama", "Fantasy",
+        "All", "Action", "Adventure", "Comedy", "Drama", "Fantasy",
         "Historical", "Horror", "Isekai", "Martial Arts", "Mystery",
         "Psychological", "Romance", "School", "Sci-Fi", "Slice of Life",
         "Sports", "Supernatural", "Yuri"
     )
 
-    var selectedGenre by rememberSaveable { mutableStateOf("Action") }
+    var selectedType by rememberSaveable { mutableStateOf("All") }
+    var selectedGenre by rememberSaveable { mutableStateOf("All") }
     var mangaList by remember { mutableStateOf<List<MangaItem>>(emptyList()) }
-    var page by remember(selectedGenre) { mutableIntStateOf(0) }
+    var page by remember(selectedType, selectedGenre) { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
-    var canLoadMore by remember(selectedGenre) { mutableStateOf(true) }
+    var canLoadMore by remember(selectedType, selectedGenre) { mutableStateOf(true) }
 
     val gridState = rememberLazyGridState()
 
-    // Initial load for selected genre
-    LaunchedEffect(selectedGenre) {
+    // Initial load for selected filters
+    LaunchedEffect(selectedType, selectedGenre) {
         loading = true
         withContext(Dispatchers.IO) {
-            mangaList = catalogDb.getByGenre(selectedGenre, limit = 60, offset = 0)
+            mangaList = catalogDb.getBrowse(
+                type = selectedType,
+                genre = selectedGenre,
+                limit = 60,
+                offset = 0
+            )
         }
         loading = false
     }
 
     // Infinite scroll pagination
-    LaunchedEffect(gridState, selectedGenre) {
+    LaunchedEffect(gridState, selectedType, selectedGenre) {
         snapshotFlow {
             val layoutInfo = gridState.layoutInfo
             val total = layoutInfo.totalItemsCount
@@ -83,12 +90,17 @@ fun BrowseScreen(
                 loadingMore = true
                 val nextPage = page + 1
                 val more = withContext(Dispatchers.IO) {
-                    catalogDb.getByGenre(selectedGenre, limit = 60, offset = nextPage * 60)
+                    catalogDb.getBrowse(
+                        type = selectedType,
+                        genre = selectedGenre,
+                        limit = 60,
+                        offset = nextPage * 60
+                    )
                 }
                 if (more.isEmpty()) {
                     canLoadMore = false
                 } else {
-                    mangaList = mangaList + more
+                    mangaList = (mangaList + more).distinctBy { it.slug }
                     page = nextPage
                 }
                 loadingMore = false
@@ -98,12 +110,41 @@ fun BrowseScreen(
 
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
-            text = "Browse Genres",
+            text = "Browse",
             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 10.dp)
+            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
         )
 
+        // Type filter row: All, Manga, Manhwa, Manhua
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(bottom = 8.dp)
+        ) {
+            items(types) { type ->
+                val isSelected = type == selectedType
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        .clickable { selectedType = type }
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = if (type == "All") "All Types" else type,
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+
+        // Genre filter row: All, Action, Adventure...
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -122,7 +163,7 @@ fun BrowseScreen(
                         .padding(horizontal = 14.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = genre,
+                        text = if (genre == "All") "All Genres" else genre,
                         color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal

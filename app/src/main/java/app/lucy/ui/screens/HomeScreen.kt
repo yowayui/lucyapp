@@ -81,9 +81,9 @@ fun HomeScreen(
     LaunchedEffect(selectedCategory) {
         loading = true
         withContext(Dispatchers.IO) {
-            val feat = catalogDb.getDailyFeatured(limit = 6, includeNsfw = false)
-            val pop = catalogDb.getDailyPopular(limit = 25, type = selectedCategory, includeNsfw = false)
-            val lat = catalogDb.getDailyLatest(limit = 45, type = selectedCategory, includeNsfw = false)
+            val feat = catalogDb.getDailyFeatured(limit = 6, includeNsfw = false).distinctBy { it.slug }
+            val pop = catalogDb.getDailyPopular(limit = 25, type = selectedCategory, includeNsfw = false).distinctBy { it.slug }
+            val lat = catalogDb.getDailyLatest(limit = 45, type = selectedCategory, includeNsfw = false).distinctBy { it.slug }
             val hist = userDb.getHistory().take(10)
             featuredBanners = feat
             popularList = pop

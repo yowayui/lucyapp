@@ -92,6 +92,10 @@ fun SeriesScreen(
         withContext(Dispatchers.IO) {
             val item = catalogDb.getBySlug(slug)
             val baseChs = catalogDb.getChapters(slug)
+            val maxBase = baseChs.mapNotNull { it.number.toFloatOrNull() }.maxOrNull() ?: 0f
+            if (maxBase > 0f) {
+                userDb.cleanBogusExtraChapters(slug, maxBase)
+            }
             val extraChs = userDb.getExtraChapters(slug)
             val combined = (baseChs + extraChs).distinctBy { it.number }.sortedWith { a, b ->
                 val aNum = a.number.toFloatOrNull() ?: 0f
@@ -131,7 +135,7 @@ fun SeriesScreen(
                         )
                         userDb.markSeriesChecked(slug, liveChapters.size)
                         if (liveChapters.isNotEmpty()) {
-                            userDb.saveExtraChapters(slug, liveChapters)
+                            userDb.replaceExtraChapters(slug, liveChapters)
                             val baseChs = catalogDb.getChapters(slug)
                             val extraChs = userDb.getExtraChapters(slug)
                             val combined = (baseChs + extraChs).distinctBy { it.number }.sortedWith { a, b ->
@@ -211,7 +215,7 @@ fun SeriesScreen(
                                 }
                                 if (newChapters.isNotEmpty()) {
                                     withContext(Dispatchers.IO) {
-                                        userDb.saveExtraChapters(slug, newChapters)
+                                        userDb.replaceExtraChapters(slug, newChapters)
                                         userDb.markSeriesChecked(slug, newChapters.size)
                                         val baseChs = catalogDb.getChapters(slug)
                                         val extraChs = userDb.getExtraChapters(slug)
