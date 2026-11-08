@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -20,8 +21,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -36,6 +39,7 @@ import app.lucy.ui.screens.LibraryScreen
 import app.lucy.ui.screens.ReaderScreen
 import app.lucy.ui.screens.SearchScreen
 import app.lucy.ui.screens.SeriesScreen
+import app.lucy.ui.screens.SettingsScreen
 import app.lucy.ui.theme.LucyTheme
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -57,7 +61,14 @@ class MainActivity : ComponentActivity() {
         val userDb = app.userDb
 
         setContent {
-            LucyTheme {
+            var themeMode by remember { mutableStateOf(userDb.getSetting("theme", "system")) }
+            val isDark = when (themeMode) {
+                "dark" -> true
+                "light" -> false
+                else -> isSystemInDarkTheme()
+            }
+
+            LucyTheme(darkTheme = isDark) {
                 val navController = rememberNavController()
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
@@ -70,6 +81,13 @@ class MainActivity : ComponentActivity() {
                 )
 
                 val showBottomBar = currentRoute in bottomBarRoutes
+
+                fun openReader(seriesSlug: String, chapterSlug: String, chapterNum: String) {
+                    val encSeries = URLEncoder.encode(seriesSlug, "UTF-8")
+                    val encChSlug = URLEncoder.encode(chapterSlug, "UTF-8")
+                    val encChNum = URLEncoder.encode(chapterNum, "UTF-8")
+                    navController.navigate("reader/$encSeries/$encChSlug/$encChNum")
+                }
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
@@ -122,8 +140,15 @@ class MainActivity : ComponentActivity() {
                         composable(Screen.Home.route) {
                             HomeScreen(
                                 catalogDb = catalogDb,
+                                userDb = userDb,
                                 onMangaClick = { slug ->
                                     navController.navigate("series/$slug")
+                                },
+                                onHistoryClick = { sSlug, cSlug, cNum ->
+                                    openReader(sSlug, cSlug, cNum)
+                                },
+                                onSettingsClick = {
+                                    navController.navigate("settings")
                                 }
                             )
                         }
@@ -152,7 +177,19 @@ class MainActivity : ComponentActivity() {
                                 userDb = userDb,
                                 onMangaClick = { slug ->
                                     navController.navigate("series/$slug")
+                                },
+                                onHistoryClick = { sSlug, cSlug, cNum ->
+                                    openReader(sSlug, cSlug, cNum)
                                 }
+                            )
+                        }
+
+                        composable("settings") {
+                            SettingsScreen(
+                                userDb = userDb,
+                                currentTheme = themeMode,
+                                onThemeChange = { next -> themeMode = next },
+                                onBackClick = { navController.popBackStack() }
                             )
                         }
 
@@ -167,10 +204,7 @@ class MainActivity : ComponentActivity() {
                                 userDb = userDb,
                                 onBackClick = { navController.popBackStack() },
                                 onChapterClick = { ch ->
-                                    val encSeries = URLEncoder.encode(slug, "UTF-8")
-                                    val encChSlug = URLEncoder.encode(ch.slug, "UTF-8")
-                                    val encChNum = URLEncoder.encode(ch.number, "UTF-8")
-                                    navController.navigate("reader/$encSeries/$encChSlug/$encChNum")
+                                    openReader(slug, ch.slug, ch.number)
                                 }
                             )
                         }

@@ -29,7 +29,8 @@ import coil.compose.AsyncImage
 fun MangaCard(
     manga: MangaItem,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    rank: Int? = null
 ) {
     Column(
         modifier = modifier
@@ -51,22 +52,50 @@ fun MangaCard(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = manga.title.take(1).uppercase(),
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
             }
 
-            // Type badge top-left
-            Box(
-                modifier = Modifier
-                    .padding(6.dp)
-                    .align(Alignment.TopStart)
-                    .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(3.dp))
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    text = manga.type,
-                    color = Color.White,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Medium
-                )
+            // Top-left badge: Rank (if present) or Type
+            if (rank != null) {
+                Box(
+                    modifier = Modifier
+                        .padding(6.dp)
+                        .align(Alignment.TopStart)
+                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp))
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "#$rank",
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .padding(6.dp)
+                        .align(Alignment.TopStart)
+                        .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(3.dp))
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = manga.type,
+                        color = Color.White,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
 
             // Score badge bottom-right

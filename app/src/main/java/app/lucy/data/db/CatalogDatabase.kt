@@ -25,7 +25,7 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
                         dbFile.parentFile?.mkdirs()
                         context.assets.open(DB_NAME).use { input ->
                             FileOutputStream(dbFile).use { output ->
-                                input.copyTo(output, bufferSize = 64 * 1024)
+                                input.copyTo(output, bufferSize = 256 * 1024)
                             }
                         }
                     }
@@ -78,6 +78,87 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
         )
     }
 
+    // ponytail: LCG deterministic daily shuffle matching web (dataset.ts); rotate daily content automatically.
+    private fun getDailySeed(): Long {
+        val cal = java.util.Calendar.getInstance()
+        return (cal.get(java.util.Calendar.YEAR) * 10000 +
+                (cal.get(java.util.Calendar.MONTH) + 1) * 100 +
+                cal.get(java.util.Calendar.DAY_OF_MONTH)).toLong()
+    }
+
+    fun getDailyFeatured(limit: Int = 6, includeNsfw: Boolean = false): List<MangaItem> {
+        val nsfwFilter = if (!includeNsfw) "AND is_nsfw = 0 AND type != 'Doujinshi'" else ""
+        val sql = "SELECT * FROM catalog WHERE score >= 8.0 AND thumb IS NOT NULL AND thumb != '' AND description IS NOT NULL AND description != '' $nsfwFilter ORDER BY score DESC LIMIT 80"
+        val pool = mutableListOf<MangaItem>()
+        db.rawQuery(sql, emptyArray()).use { cursor ->
+            while (cursor.moveToNext()) {
+                pool.add(mapRow(cursor))
+            }
+        }
+        if (pool.size <= limit) return pool
+
+        var seed = getDailySeed() + 777
+        val shuffled = pool.toMutableList()
+        for (i in shuffled.indices.reversed()) {
+            seed = (seed * 9301 + 49297) % 233280
+            val rand = seed / 233280.0
+            val j = (rand * (i + 1)).toInt().coerceIn(0, i)
+            val temp = shuffled[i]
+            shuffled[i] = shuffled[j]
+            shuffled[j] = temp
+        }
+        return shuffled.take(limit)
+    }
+
+    fun getDailyPopular(limit: Int = 25, type: String? = null, includeNsfw: Boolean = false): List<MangaItem> {
+        val poolLimit = 150
+        val typeFilter = if (!type.isNullOrBlank() && !type.equals("All", ignoreCase = true)) "AND type = ? COLLATE NOCASE" else ""
+        val nsfwFilter = if (!includeNsfw) "AND is_nsfw = 0 AND type != 'Doujinshi'" else ""
+        val sql = "SELECT * FROM catalog WHERE thumb IS NOT NULL AND thumb != '' $typeFilter $nsfwFilter ORDER BY score DESC LIMIT $poolLimit"
+        val args = if (!type.isNullOrBlank() && !type.equals("All", ignoreCase = true)) arrayOf(type) else emptyArray()
+
+        val pool = mutableListOf<MangaItem>()
+        db.rawQuery(sql, args).use { cursor ->
+            while (cursor.moveToNext()) {
+                pool.add(mapRow(cursor))
+            }
+        }
+        if (pool.size <= limit) return pool
+
+        var seed = getDailySeed()
+        val shuffled = pool.toMutableList()
+        for (i in shuffled.indices.reversed()) {
+            seed = (seed * 9301 + 49297) % 233280
+            val rand = seed / 233280.0
+            val j = (rand * (i + 1)).toInt().coerceIn(0, i)
+            val temp = shuffled[i]
+            shuffled[i] = shuffled[j]
+            shuffled[j] = temp
+        }
+        return shuffled.take(limit)
+    }
+
+    fun getDailyLatest(limit: Int = 40, type: String? = null, includeNsfw: Boolean = false): List<MangaItem> {
+        val poolLimit = 250
+        val typeFilter = if (!type.isNullOrBlank() && !type.equals("All", ignoreCase = true)) "AND type = ? COLLATE NOCASE" else ""
+        val nsfwFilter = if (!includeNsfw) "AND is_nsfw = 0 AND type != 'Doujinshi'" else ""
+        val sql = "SELECT * FROM catalog WHERE thumb IS NOT NULL AND thumb != '' $typeFilter $nsfwFilter ORDER BY rowid DESC LIMIT $poolLimit"
+        val args = if (!type.isNullOrBlank() && !type.equals("All", ignoreCase = true)) arrayOf(type) else emptyArray()
+
+        val pool = mutableListOf<MangaItem>()
+        db.rawQuery(sql, args).use { cursor ->
+            while (cursor.moveToNext()) {
+                pool.add(mapRow(cursor))
+            }
+        }
+        if (pool.size <= limit) return pool
+
+        val daySeed = getDailySeed()
+        val maxOffset = pool.size - limit
+        val offset = ((daySeed * 23) % maxOffset).toInt().coerceIn(0, maxOffset)
+        return pool.subList(offset, offset + limit)
+    }
+
     fun getPopular(limit: Int = 40, offset: Int = 0, includeNsfw: Boolean = false): List<MangaItem> {
         val nsfwClause = if (!includeNsfw) "WHERE is_nsfw = 0 AND type != 'Doujinshi'" else ""
         val sql = "SELECT * FROM catalog $nsfwClause ORDER BY score DESC LIMIT ? OFFSET ?"
@@ -127,7 +208,7 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
     }
 
     fun search(query: String, limit: Int = 50, includeNsfw: Boolean = true): List<MangaItem> {
-        val cleanQ = query.trim().replace(Regex("[^a-zA-Z0-9\\s]"), " ")
+        val cleanQ = query.trim().replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
         val tokens = cleanQ.split("\\s+".toRegex()).filter { it.isNotBlank() }
         if (tokens.isEmpty()) return emptyList()
 
@@ -152,8 +233,8 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
             }
         } catch (e: Exception) {
             // Fallback to simple LIKE query if FTS expression has syntax quirk
-            val fallbackSql = "SELECT * FROM catalog WHERE (title LIKE ? OR english_name LIKE ?) $nsfwClause ORDER BY score DESC LIMIT ?"
-            db.rawQuery(fallbackSql, arrayOf("%$query%", "%$query%", limit.toString())).use { cursor ->
+            val fallbackSql = "SELECT * FROM catalog WHERE (title LIKE ? OR english_name LIKE ? OR native_name LIKE ?) $nsfwClause ORDER BY score DESC LIMIT ?"
+            db.rawQuery(fallbackSql, arrayOf("%$query%", "%$query%", "%$query%", limit.toString())).use { cursor ->
                 while (cursor.moveToNext()) {
                     list.add(mapRow(cursor))
                 }

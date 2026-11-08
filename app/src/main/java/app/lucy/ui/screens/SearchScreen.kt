@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,7 +46,7 @@ fun SearchScreen(
     catalogDb: CatalogDatabase,
     onMangaClick: (String) -> Unit
 ) {
-    var query by remember { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
     var results by remember { mutableStateOf<List<MangaItem>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
 
@@ -58,7 +59,7 @@ fun SearchScreen(
         searching = true
         delay(250) // debounce typing
         withContext(Dispatchers.IO) {
-            results = catalogDb.search(query, limit = 60)
+            results = catalogDb.search(query, limit = 100)
         }
         searching = false
     }

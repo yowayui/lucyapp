@@ -12,8 +12,8 @@ android {
         applicationId = "app.lucy"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -44,6 +44,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -63,6 +64,9 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.8.3")
+
+    // WorkManager for daily background chapter sync
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     // Image loading
     implementation("io.coil-kt:coil-compose:2.7.0")

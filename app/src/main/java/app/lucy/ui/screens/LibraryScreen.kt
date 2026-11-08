@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,9 +53,10 @@ import kotlinx.coroutines.withContext
 fun LibraryScreen(
     catalogDb: CatalogDatabase,
     userDb: UserDatabase,
-    onMangaClick: (String) -> Unit
+    onMangaClick: (String) -> Unit,
+    onHistoryClick: (seriesSlug: String, chapterSlug: String, chapterNum: String) -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var bookmarks by remember { mutableStateOf<List<MangaItem>>(emptyList()) }
     var history by remember { mutableStateOf<List<HistoryItem>>(emptyList()) }
 
@@ -138,7 +140,10 @@ fun LibraryScreen(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable { onMangaClick(item.slug) }
+                                .clickable {
+                                    val chNum = item.chapterTitle.removePrefix("Chapter ").trim().ifBlank { "1" }
+                                    onHistoryClick(item.slug, item.chapterSlug, chNum)
+                                }
                                 .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {

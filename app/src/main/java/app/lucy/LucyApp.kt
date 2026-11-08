@@ -4,6 +4,7 @@ import android.app.Application
 import app.lucy.data.db.CatalogDatabase
 import app.lucy.data.db.UserDatabase
 import app.lucy.data.source.NetworkClient
+import app.lucy.data.update.ChapterUpdateScheduler
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
@@ -22,6 +23,10 @@ class LucyApp : Application(), ImageLoaderFactory {
         super.onCreate()
         userDb = UserDatabase.getInstance(this)
         catalogDb = CatalogDatabase.getInstance(this)
+
+        if (userDb.getSetting("daily_update_enabled", "true") == "true") {
+            ChapterUpdateScheduler.scheduleDaily(this)
+        }
     }
 
     override fun newImageLoader(): ImageLoader {
