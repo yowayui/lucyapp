@@ -131,12 +131,23 @@ fun MangaCard(
             modifier = Modifier.padding(top = 4.dp, bottom = 1.dp)
         )
 
-        val meta = if (manga.latestChapter.isNotBlank()) "Ch. ${manga.latestChapter}" else "${manga.chapterCount} chapters"
+        val meta = buildString {
+            if (!manga.nativeName.isNullOrBlank() && manga.nativeName != manga.title) {
+                append(manga.nativeName)
+                append(" | ")
+            }
+            if (manga.latestChapter.isNotBlank()) {
+                append("Ch. ${manga.latestChapter}")
+            } else {
+                append("${manga.chapterCount} ch")
+            }
+        }
         Text(
             text = meta,
             style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
