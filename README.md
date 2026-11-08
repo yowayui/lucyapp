@@ -46,4 +46,4 @@ The APK ships with an offline catalog of series metadata. Chapter images and pag
 
 ## License
 
-[MIT](LICENSE)
+All rights reserved. See [LICENSE](LICENSE) for details.
