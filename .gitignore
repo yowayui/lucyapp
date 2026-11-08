@@ -1,0 +1,25 @@
+# Gradle
+.gradle/
+build/
+app/build/
+
+# Local configuration
+local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Signing and build outputs
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Offline catalog asset, see README
+app/src/main/assets/lucy_catalog.db
