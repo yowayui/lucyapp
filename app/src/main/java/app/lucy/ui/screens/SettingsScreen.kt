@@ -48,6 +48,9 @@ import androidx.compose.ui.unit.sp
 import app.lucy.BuildConfig
 import app.lucy.data.db.UserDatabase
 import app.lucy.data.update.ChapterUpdateScheduler
+import app.lucy.ui.components.AppUpdate
+import app.lucy.ui.components.AppUpdateChecker
+import app.lucy.ui.components.UpdateDialog
 import app.lucy.ui.theme.Newsreader
 import coil.Coil
 import kotlinx.coroutines.Dispatchers
@@ -75,6 +78,8 @@ fun SettingsScreen(
 
     var showClearHistoryDialog by remember { mutableStateOf(false) }
     var showClearMarkersDialog by remember { mutableStateOf(false) }
+    var updateDialogData by remember { mutableStateOf<AppUpdate?>(null) }
+    var checkingAppUpdate by remember { mutableStateOf(false) }
 
     val versionName = BuildConfig.VERSION_NAME
 
@@ -474,8 +479,34 @@ fun SettingsScreen(
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
+
+            ClickableActionItem(
+                title = "Check for app update",
+                subtitle = if (checkingAppUpdate) "Checking GitHub..." else "Look for new release"
+            ) {
+                if (checkingAppUpdate) return@ClickableActionItem
+                checkingAppUpdate = true
+                scope.launch {
+                    val update = AppUpdateChecker.checkLatest(BuildConfig.VERSION_NAME)
+                    checkingAppUpdate = false
+                    if (update != null) {
+                        updateDialogData = update
+                    } else {
+                        Toast.makeText(context, "App is up to date ($versionName)", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    updateDialogData?.let { update ->
+        UpdateDialog(
+            update = update,
+            context = context,
+            onDismiss = { updateDialogData = null }
+        )
     }
 
     // Clear History Confirmation

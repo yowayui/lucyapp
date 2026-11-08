@@ -20,12 +20,14 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -33,6 +35,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import app.lucy.ui.components.AppUpdate
+import app.lucy.ui.components.AppUpdateChecker
+import app.lucy.ui.components.UpdateDialog
 import app.lucy.ui.screens.BrowseScreen
 import app.lucy.ui.screens.HomeScreen
 import app.lucy.ui.screens.LibraryScreen
@@ -69,6 +74,24 @@ class MainActivity : ComponentActivity() {
             }
 
             LucyTheme(darkTheme = isDark) {
+                val context = LocalContext.current
+                var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
+
+                LaunchedEffect(Unit) {
+                    val update = AppUpdateChecker.checkLatest(BuildConfig.VERSION_NAME)
+                    if (update != null) {
+                        availableUpdate = update
+                    }
+                }
+
+                availableUpdate?.let { update ->
+                    UpdateDialog(
+                        update = update,
+                        context = context,
+                        onDismiss = { availableUpdate = null }
+                    )
+                }
+
                 val navController = rememberNavController()
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
