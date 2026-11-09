@@ -162,6 +162,7 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
     fun getBrowse(
         type: String? = null,
         genre: String? = null,
+        language: String? = null,
         limit: Int = 60,
         offset: Int = 0,
         includeNsfw: Boolean = false
@@ -179,6 +180,16 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
         if (!genre.isNullOrBlank() && !genre.equals("All", ignoreCase = true)) {
             conditions.add("genres LIKE ?")
             args.add("%$genre%")
+        }
+
+        // ponytail: language filter via source_group suffix convention.
+        // English sources have no suffix; Indonesian sources end with "-ID".
+        // Upgrade path: add a dedicated `language` column when more locales are scraped.
+        if (!language.isNullOrBlank() && !language.equals("All", ignoreCase = true)) {
+            when (language.uppercase()) {
+                "ID" -> conditions.add("source_group LIKE '%-ID'")
+                "EN" -> conditions.add("source_group NOT LIKE '%-ID'")
+            }
         }
 
         if (!includeNsfw) {

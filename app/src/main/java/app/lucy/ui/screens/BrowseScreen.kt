@@ -47,6 +47,7 @@ fun BrowseScreen(
     onMangaClick: (String) -> Unit
 ) {
     val types = listOf("All", "Manga", "Manhwa", "Manhua")
+    val languages = listOf("All", "EN", "ID")
     val genres = listOf(
         "All",
         "Action", "Adventure", "Comedy", "Cooking", "Crime", "Demons",
@@ -60,22 +61,24 @@ fun BrowseScreen(
     )
 
     var selectedType by rememberSaveable { mutableStateOf("All") }
+    var selectedLanguage by rememberSaveable { mutableStateOf("All") }
     var selectedGenre by rememberSaveable { mutableStateOf("All") }
     var mangaList by remember { mutableStateOf<List<MangaItem>>(emptyList()) }
-    var page by remember(selectedType, selectedGenre) { mutableIntStateOf(0) }
+    var page by remember(selectedType, selectedLanguage, selectedGenre) { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
-    var canLoadMore by remember(selectedType, selectedGenre) { mutableStateOf(true) }
+    var canLoadMore by remember(selectedType, selectedLanguage, selectedGenre) { mutableStateOf(true) }
 
     val gridState = rememberLazyGridState()
 
     // Initial load for selected filters
-    LaunchedEffect(selectedType, selectedGenre) {
+    LaunchedEffect(selectedType, selectedLanguage, selectedGenre) {
         loading = true
         withContext(Dispatchers.IO) {
             mangaList = catalogDb.getBrowse(
                 type = selectedType,
                 genre = selectedGenre,
+                language = selectedLanguage,
                 limit = 60,
                 offset = 0
             )
@@ -84,7 +87,7 @@ fun BrowseScreen(
     }
 
     // Infinite scroll pagination
-    LaunchedEffect(gridState, selectedType, selectedGenre) {
+    LaunchedEffect(gridState, selectedType, selectedLanguage, selectedGenre) {
         snapshotFlow {
             val layoutInfo = gridState.layoutInfo
             val total = layoutInfo.totalItemsCount
@@ -98,6 +101,7 @@ fun BrowseScreen(
                     catalogDb.getBrowse(
                         type = selectedType,
                         genre = selectedGenre,
+                        language = selectedLanguage,
                         limit = 60,
                         offset = nextPage * 60
                     )
@@ -141,6 +145,40 @@ fun BrowseScreen(
                 ) {
                     Text(
                         text = if (type == "All") "All Types" else type,
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+
+        // Language filter row: All, EN, ID
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(bottom = 8.dp)
+        ) {
+            items(languages) { lang ->
+                val isSelected = lang == selectedLanguage
+                val label = when (lang) {
+                    "All" -> "All Languages"
+                    "EN" -> "English"
+                    "ID" -> "Indonesia"
+                    else -> lang
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        .clickable { selectedLanguage = lang }
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = label,
                         color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
