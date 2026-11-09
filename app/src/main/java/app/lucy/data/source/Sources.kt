@@ -1,5 +1,6 @@
 package app.lucy.data.source
 
+import android.content.Context
 import app.lucy.data.model.Chapter
 import okhttp3.Dns
 import okhttp3.OkHttpClient
@@ -13,75 +14,54 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 object NetworkClient {
-    private val MDX_IP = InetAddress.getByName("45.129.229.1")
-    private val MP_IPS = listOf(
-        InetAddress.getByName("104.21.5.54"),
-        InetAddress.getByName("172.67.133.1")
+    private val STATIC_HOSTS = mapOf(
+        "mangapill.com" to listOf(InetAddress.getByName("104.21.5.54"), InetAddress.getByName("172.67.133.1")),
+        "cdn.readdetectiveconan.com" to listOf(InetAddress.getByName("104.21.64.158"), InetAddress.getByName("172.67.186.172")),
+        "weebcentral.com" to listOf(InetAddress.getByName("104.21.32.126"), InetAddress.getByName("172.67.151.248")),
+        "scans.lastation.us" to listOf(InetAddress.getByName("104.21.94.250"), InetAddress.getByName("172.67.142.40")),
+        "hot.planeptune.us" to listOf(InetAddress.getByName("172.67.198.66"), InetAddress.getByName("104.21.36.180")),
+        "temp.compsci88.com" to listOf(InetAddress.getByName("172.67.183.54"), InetAddress.getByName("104.21.51.175")),
+        "manhwatop.com" to listOf(InetAddress.getByName("172.67.202.193"), InetAddress.getByName("104.21.77.2")),
+        "c1.manhwatop.com" to listOf(InetAddress.getByName("172.67.202.193"), InetAddress.getByName("104.21.77.2")),
+        "c2.manhwatop.com" to listOf(InetAddress.getByName("172.67.202.193"), InetAddress.getByName("104.21.77.2")),
+        "c3.manhwatop.com" to listOf(InetAddress.getByName("172.67.202.193"), InetAddress.getByName("104.21.77.2")),
+        "c4.manhwatop.com" to listOf(InetAddress.getByName("104.21.77.2"), InetAddress.getByName("172.67.202.193")),
+        "c5.manhwatop.com" to listOf(InetAddress.getByName("172.67.202.193"), InetAddress.getByName("104.21.77.2")),
+        "api.mangadex.org" to listOf(InetAddress.getByName("45.129.229.1")),
+        "uploads.mangadex.org" to listOf(InetAddress.getByName("45.129.229.2")),
+        "dojing.net" to listOf(InetAddress.getByName("172.67.177.176"), InetAddress.getByName("104.21.40.59")),
+        "shirodoujin.com" to listOf(InetAddress.getByName("172.67.193.133"), InetAddress.getByName("104.21.65.224")),
+        "mkissa.to" to listOf(InetAddress.getByName("172.67.187.90"), InetAddress.getByName("104.21.56.175")),
+        "api.mkissa.net" to listOf(InetAddress.getByName("172.67.187.90"), InetAddress.getByName("104.21.56.175")),
+        "cdn.mkissa.net" to listOf(InetAddress.getByName("172.67.187.90"), InetAddress.getByName("104.21.56.175")),
+        "wp.youtube-anime.com" to listOf(InetAddress.getByName("172.67.2.119"), InetAddress.getByName("104.21.54.102")),
+        "ytimgf.youtube-anime.com" to listOf(InetAddress.getByName("172.67.2.119"), InetAddress.getByName("104.21.54.102"))
     )
+
+    private val BLOCKED_IPS = setOf("202.3.218.139", "180.131.144.144", "180.131.144.145", "36.86.63.181", "36.86.63.182")
     private val dnsCache = ConcurrentHashMap<String, List<InetAddress>>()
 
-    // Direct HTTP client without custom DNS loop for DoH queries
-    private val dohClient = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(5, TimeUnit.SECONDS)
-        .build()
+    val customDns = object : Dns {
+        override fun lookup(hostname: String): List<InetAddress> {
+            val lower = hostname.lowercase()
+            dnsCache[lower]?.let { return it }
 
-    private fun resolveDoH(hostname: String): List<InetAddress>? {
-        val endpoints = listOf(
-            "https://1.1.1.1/dns-query?name=$hostname&type=A",
-            "https://dns.google/resolve?name=$hostname&type=A"
-        )
-        for (url in endpoints) {
+            STATIC_HOSTS[lower]?.let {
+                dnsCache[lower] = it
+                return it
+            }
+
             try {
-                val req = Request.Builder()
-                    .url(url)
-                    .header("Accept", "application/dns-json")
-                    .build()
-                val resp = dohClient.newCall(req).execute()
-                val body = resp.body?.string().orEmpty()
-                if (body.isNotBlank()) {
-                    val json = JSONObject(body)
-                    val answers = json.optJSONArray("Answer")
-                    if (answers != null && answers.length() > 0) {
-                        val ips = mutableListOf<InetAddress>()
-                        for (i in 0 until answers.length()) {
-                            val item = answers.getJSONObject(i)
-                            if (item.optInt("type") == 1) { // Type 1 = A record
-                                val ipStr = item.optString("data")
-                                if (ipStr.isNotBlank()) {
-                                    runCatching { InetAddress.getByName(ipStr) }.getOrNull()?.let { ips.add(it) }
-                                }
-                            }
-                        }
-                        if (ips.isNotEmpty()) return ips
-                    }
+                val sysIps = Dns.SYSTEM.lookup(hostname)
+                val cleanIps = sysIps.filter { it.hostAddress?.let { addr -> !BLOCKED_IPS.contains(addr) } == true }
+                if (cleanIps.isNotEmpty()) {
+                    dnsCache[lower] = cleanIps
+                    return cleanIps
                 }
             } catch (_: Exception) {
             }
-        }
-        return null
-    }
 
-    // Custom DNS with DoH and fallback hardcoded IPs
-    val customDns = object : Dns {
-        override fun lookup(hostname: String): List<InetAddress> {
-            dnsCache[hostname]?.let { return it }
-
-            val dohIps = resolveDoH(hostname)
-            if (!dohIps.isNullOrEmpty()) {
-                dnsCache[hostname] = dohIps
-                return dohIps
-            }
-
-            return if (hostname.equals("api.mangadex.org", ignoreCase = true) ||
-                hostname.equals("uploads.mangadex.org", ignoreCase = true)
-            ) {
-                listOf(MDX_IP)
-            } else if (hostname.equals("mangapill.com", ignoreCase = true)) {
-                MP_IPS
-            } else {
-                Dns.SYSTEM.lookup(hostname)
-            }
+            return Dns.SYSTEM.lookup(hostname)
         }
     }
 
@@ -97,6 +77,8 @@ object NetworkClient {
 
             if (host.contains("mangapill") || host.contains("readdetectiveconan") || host.contains("mangap")) {
                 builder.header("Referer", "https://mangapill.com/")
+            } else if (host.contains("weebcentral") || host.contains("lastation") || host.contains("planeptune") || host.contains("compsci88")) {
+                builder.header("Referer", "https://weebcentral.com/")
             } else if (host.contains("manhwatop")) {
                 builder.header("Referer", "https://manhwatop.com/")
             } else if (host.contains("mangadex")) {
@@ -105,6 +87,8 @@ object NetworkClient {
                 builder.header("Referer", "https://dojing.net/")
             } else if (host.contains("shirodoujin")) {
                 builder.header("Referer", "https://shirodoujin.com/")
+            } else if (host.contains("mkissa") || host.contains("youtube-anime")) {
+                builder.header("Referer", "https://mkissa.to/")
             }
             chain.proceed(builder.build())
         }
@@ -112,6 +96,10 @@ object NetworkClient {
 }
 
 object TitleMatcher {
+    fun cleanSearchQuery(title: String): String {
+        return title.replace(Regex("[/\\\\:_~-]+"), " ").replace(Regex("\\s+"), " ").trim()
+    }
+
     fun slugify(s: String?): String {
         if (s.isNullOrBlank()) return ""
         return s.lowercase()
@@ -120,19 +108,28 @@ object TitleMatcher {
             .trim('-')
     }
 
+    fun matchScore(query: String, candidateTitle: String, candidateSlug: String = ""): Int {
+        val q = slugify(query)
+        val cTitle = slugify(candidateTitle)
+        val cSlug = slugify(candidateSlug)
+        if (q.isBlank()) return 0
+
+        if (q == cTitle || (cSlug.isNotBlank() && q == cSlug)) return 100
+
+        val qParts = q.split("-").filter { it.isNotBlank() }
+        val cTitleParts = cTitle.split("-").filter { it.isNotBlank() }
+
+        if (cTitle.startsWith("$q-") || (cSlug.isNotBlank() && cSlug.startsWith("$q-"))) return 75
+        if (q.startsWith("$cTitle-") || (cSlug.isNotBlank() && q.startsWith("$cSlug-"))) return 65
+
+        if (qParts.size >= 2 && (cTitle.contains(q) || (cSlug.isNotBlank() && cSlug.contains(q)))) return 50
+        if (cTitleParts.size >= 2 && q.contains(cTitle)) return 40
+
+        return 0
+    }
+
     fun titlesMatch(query: String, candidate: String): Boolean {
-        val qSlug = slugify(query)
-        val cSlug = slugify(candidate)
-        if (qSlug.isBlank() || cSlug.isBlank()) return false
-        if (qSlug == cSlug) return true
-
-        val qParts = qSlug.split("-").filter { it.isNotBlank() }
-        val cParts = cSlug.split("-").filter { it.isNotBlank() }
-
-        if (qParts.size >= 2 && cSlug.contains(qSlug)) return true
-        if (cParts.size >= 2 && qSlug.contains(cSlug)) return true
-
-        return false
+        return matchScore(query, candidate, candidate) > 0
     }
 }
 
@@ -148,64 +145,72 @@ object MangaPillSource {
 
         val doc = Jsoup.parse(searchHtml, searchUrl)
 
-        var matchedMangaUrl: String? = null
+        val candidates = mutableListOf<Triple<String, String, Int>>()
         val mangaLinks = doc.select("a[href^='/manga/'], a[href*='/manga/']")
         for (link in mangaLinks) {
-            val candidateTitle = link.text()
+            val candidateTitle = link.text().trim()
+            val href = link.absUrl("href")
             val slugFromHref = link.attr("href").substringAfterLast("/")
-            if (candidateTitle.isNotBlank() && (TitleMatcher.titlesMatch(seriesTitle, candidateTitle) || TitleMatcher.titlesMatch(seriesTitle, slugFromHref))) {
-                matchedMangaUrl = link.absUrl("href")
-                break
+            val score = TitleMatcher.matchScore(seriesTitle, candidateTitle, slugFromHref)
+            if (score > 0 && href.isNotBlank()) {
+                candidates.add(Triple(href, candidateTitle, score))
             }
         }
 
-        if (matchedMangaUrl.isNullOrBlank()) return emptyList()
-
-        val mangaReq = Request.Builder().url(matchedMangaUrl).build()
-        val mangaHtml = runCatching {
-            NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
-        }.getOrNull() ?: return emptyList()
-
-        val mangaDoc = Jsoup.parse(mangaHtml, matchedMangaUrl)
-
-        var targetChapterUrl: String? = null
-        val chapterLinks = mangaDoc.select("#chapters a, div.chapters-container a, a[href*='/chapters/']")
+        val sortedCandidates = candidates.distinctBy { it.first }.sortedByDescending { it.third }
         val targetNum = chapterNum.trim()
 
-        for (link in chapterLinks) {
-            val text = link.text()
-            val href = link.attr("href")
-            val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $href")
-            if (match != null) {
-                val foundNum = match.groupValues[1]
-                if (foundNum == targetNum || foundNum.toFloatOrNull() == targetNum.toFloatOrNull()) {
-                    targetChapterUrl = link.absUrl("href")
-                    break
+        for (cand in sortedCandidates.take(3)) {
+            val mangaUrl = cand.first
+            val mangaReq = Request.Builder().url(mangaUrl).build()
+            val mangaHtml = runCatching {
+                NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
+            }.getOrNull() ?: continue
+
+            val mangaDoc = Jsoup.parse(mangaHtml, mangaUrl)
+            var targetChapterUrl: String? = null
+            val chapterLinks = mangaDoc.select("#chapters a, div.chapters-container a, a[href*='/chapters/']")
+
+            for (link in chapterLinks) {
+                val text = link.text()
+                val href = link.attr("href")
+                val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $href")
+                if (match != null) {
+                    val foundNum = match.groupValues[1]
+                    if (foundNum == targetNum || foundNum.toFloatOrNull() == targetNum.toFloatOrNull()) {
+                        targetChapterUrl = link.absUrl("href")
+                        break
+                    }
+                }
+            }
+
+            if (!targetChapterUrl.isNullOrBlank()) {
+                val chapterReq = Request.Builder().url(targetChapterUrl).build()
+                val chapterHtml = runCatching {
+                    NetworkClient.okHttp.newCall(chapterReq).execute().use { it.body?.string().orEmpty() }
+                }.getOrNull() ?: continue
+
+                val chapterDoc = Jsoup.parse(chapterHtml, targetChapterUrl)
+                val images = mutableListOf<String>()
+                val imgElements = chapterDoc.select("img.js-page, picture img, div[data-controller='viewer'] img, #viewer img, img[data-src]")
+                for (img in imgElements) {
+                    val src = img.attr("data-src").ifBlank { img.attr("src") }.trim()
+                    if (src.isNotBlank() && !src.contains("placeholder") && !src.contains("logo") && !src.contains("favicon")) {
+                        images.add(src)
+                    }
+                }
+                if (images.isNotEmpty()) {
+                    return images
                 }
             }
         }
 
-        if (targetChapterUrl.isNullOrBlank()) return emptyList()
-
-        val chapterReq = Request.Builder().url(targetChapterUrl).build()
-        val chapterHtml = runCatching {
-            NetworkClient.okHttp.newCall(chapterReq).execute().use { it.body?.string().orEmpty() }
-        }.getOrNull() ?: return emptyList()
-
-        val chapterDoc = Jsoup.parse(chapterHtml, targetChapterUrl)
-        val images = mutableListOf<String>()
-        val imgElements = chapterDoc.select("img.js-page, picture img, div[data-controller='viewer'] img, #viewer img, img[data-src]")
-        for (img in imgElements) {
-            val src = img.attr("data-src").ifBlank { img.attr("src") }.trim()
-            if (src.isNotBlank() && !src.contains("placeholder") && !src.contains("logo") && !src.contains("favicon")) {
-                images.add(src)
-            }
-        }
-        return images
+        return emptyList()
     }
 
     fun fetchLiveChapters(seriesTitle: String, seriesSlug: String): List<Chapter> {
-        val encodedQuery = URLEncoder.encode(seriesTitle, "UTF-8")
+        val queryText = TitleMatcher.cleanSearchQuery(seriesTitle)
+        val encodedQuery = URLEncoder.encode(queryText.ifBlank { seriesTitle }, "UTF-8")
         val searchUrl = "https://mangapill.com/search?q=$encodedQuery"
 
         val searchReq = Request.Builder().url(searchUrl).build()
@@ -214,46 +219,197 @@ object MangaPillSource {
         }.getOrNull() ?: return emptyList()
 
         val doc = Jsoup.parse(searchHtml, searchUrl)
-        var matchedMangaUrl: String? = null
+        val candidates = mutableListOf<Pair<String, Int>>()
+
         for (link in doc.select("a[href^='/manga/'], a[href*='/manga/']")) {
-            val candidateTitle = link.text()
+            val candidateTitle = link.text().trim()
+            val href = link.absUrl("href")
             val slugFromHref = link.attr("href").substringAfterLast("/")
-            if (candidateTitle.isNotBlank() && (TitleMatcher.titlesMatch(seriesTitle, candidateTitle) || TitleMatcher.titlesMatch(seriesTitle, slugFromHref))) {
-                matchedMangaUrl = link.absUrl("href")
-                break
+            val score = TitleMatcher.matchScore(seriesTitle, candidateTitle, slugFromHref)
+            if (score > 0 && href.isNotBlank()) {
+                candidates.add(Pair(href, score))
             }
         }
 
-        if (matchedMangaUrl.isNullOrBlank()) return emptyList()
+        val sorted = candidates.distinctBy { it.first }.sortedByDescending { it.second }
+        for (cand in sorted.take(3)) {
+            val mangaUrl = cand.first
+            val mangaReq = Request.Builder().url(mangaUrl).build()
+            val mangaHtml = runCatching {
+                NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
+            }.getOrNull() ?: continue
 
-        val mangaReq = Request.Builder().url(matchedMangaUrl).build()
-        val mangaHtml = runCatching {
-            NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
+            val mangaDoc = Jsoup.parse(mangaHtml, mangaUrl)
+            val chapters = mutableListOf<Chapter>()
+            val chapterLinks = mangaDoc.select("#chapters a, div.chapters-container a, a[href*='/chapters/']")
+            val seen = mutableSetOf<String>()
+            for (link in chapterLinks) {
+                val absHref = link.absUrl("href")
+                if (!absHref.contains("/chapters/")) continue
+                val text = link.text()
+                val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $absHref")
+                if (match != null) {
+                    val num = match.groupValues[1]
+                    if (seen.add(num)) {
+                        chapters.add(
+                            Chapter(
+                                title = "Chapter $num",
+                                slug = "$seriesSlug-chapter-$num",
+                                number = num
+                            )
+                        )
+                    }
+                }
+            }
+            if (chapters.isNotEmpty()) return chapters
+        }
+
+        return emptyList()
+    }
+}
+
+object WeebCentralSource {
+    fun fetchChapterImages(seriesTitle: String, chapterNum: String): List<String> {
+        val queryText = TitleMatcher.cleanSearchQuery(seriesTitle)
+        val encodedQuery = URLEncoder.encode(queryText.ifBlank { seriesTitle }, "UTF-8")
+        val searchUrl = "https://weebcentral.com/search/data?author=&text=$encodedQuery&sort=Best+Match&order=Ascending&official=Any&display_mode=Full+Display"
+
+        val searchReq = Request.Builder().url(searchUrl).build()
+        val searchHtml = runCatching {
+            NetworkClient.okHttp.newCall(searchReq).execute().use { it.body?.string().orEmpty() }
         }.getOrNull() ?: return emptyList()
 
-        val mangaDoc = Jsoup.parse(mangaHtml, matchedMangaUrl)
-        val chapters = mutableListOf<Chapter>()
-        val chapterLinks = mangaDoc.select("#chapters a, div.chapters-container a, a[href*='/chapters/']")
-        val seen = mutableSetOf<String>()
-        for (link in chapterLinks) {
-            val absHref = link.absUrl("href")
-            if (!absHref.contains("/chapters/")) continue
-            val text = link.text()
-            val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $absHref")
-            if (match != null) {
-                val num = match.groupValues[1]
-                if (seen.add(num)) {
+        val doc = Jsoup.parse(searchHtml, searchUrl)
+        val candidates = mutableListOf<Triple<String, String, Int>>()
+
+        for (link in doc.select("a[href*='/series/']")) {
+            val href = link.attr("href")
+            val seriesId = href.substringAfter("/series/").substringBefore("/")
+            val seriesSlug = href.substringAfter("/series/").substringAfter("/")
+            val titleText = link.text().trim()
+            if (seriesId.isNotBlank() && seriesId != href) {
+                val score = TitleMatcher.matchScore(seriesTitle, titleText, seriesSlug)
+                if (score > 0) {
+                    candidates.add(Triple(seriesId, titleText, score))
+                }
+            }
+        }
+
+        val sortedCandidates = candidates.distinctBy { it.first }.sortedByDescending { it.third }
+        val targetNum = chapterNum.trim()
+
+        for (cand in sortedCandidates.take(3)) {
+            val seriesId = cand.first
+            val chListUrl = "https://weebcentral.com/series/$seriesId/full-chapter-list"
+            val chListReq = Request.Builder().url(chListUrl).build()
+            val chListHtml = runCatching {
+                NetworkClient.okHttp.newCall(chListReq).execute().use { it.body?.string().orEmpty() }
+            }.getOrNull() ?: continue
+
+            val chDoc = Jsoup.parse(chListHtml, chListUrl)
+            var targetChapterId: String? = null
+
+            for (link in chDoc.select("a[href*='/chapters/']")) {
+                val text = link.text()
+                val href = link.attr("href")
+                val match = Regex("(?:chapter|ch|episode|ep)[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $href")
+                if (match != null) {
+                    val foundNum = match.groupValues[1]
+                    if (foundNum == targetNum || foundNum.toFloatOrNull() == targetNum.toFloatOrNull()) {
+                        targetChapterId = href.substringAfter("/chapters/").substringBefore("/")
+                        break
+                    }
+                }
+            }
+
+            if (!targetChapterId.isNullOrBlank()) {
+                val imgPageUrl = "https://weebcentral.com/chapters/$targetChapterId/images?is_prev=False&current_page=1&reading_style=long_strip"
+                val imgReq = Request.Builder().url(imgPageUrl).build()
+                val imgHtml = runCatching {
+                    NetworkClient.okHttp.newCall(imgReq).execute().use { it.body?.string().orEmpty() }
+                }.getOrNull() ?: continue
+
+                val imgDoc = Jsoup.parse(imgHtml, imgPageUrl)
+                val images = mutableListOf<String>()
+                for (img in imgDoc.select("img[src], img[data-src]")) {
+                    val src = img.attr("src").ifBlank { img.attr("data-src") }.trim()
+                    if (src.isNotBlank() && !src.contains("placeholder") && !src.contains("logo") && !src.contains("favicon")) {
+                        images.add(src)
+                    }
+                }
+                if (images.isNotEmpty()) {
+                    return images
+                }
+            }
+        }
+
+        return emptyList()
+    }
+
+    fun fetchLiveChapters(seriesTitle: String, seriesSlug: String): List<Chapter> {
+        val queryText = TitleMatcher.cleanSearchQuery(seriesTitle)
+        val encodedQuery = URLEncoder.encode(queryText.ifBlank { seriesTitle }, "UTF-8")
+        val searchUrl = "https://weebcentral.com/search/data?author=&text=$encodedQuery&sort=Best+Match&order=Ascending&official=Any&display_mode=Full+Display"
+
+        val searchReq = Request.Builder().url(searchUrl).build()
+        val searchHtml = runCatching {
+            NetworkClient.okHttp.newCall(searchReq).execute().use { it.body?.string().orEmpty() }
+        }.getOrNull() ?: return emptyList()
+
+        val doc = Jsoup.parse(searchHtml, searchUrl)
+        val candidates = mutableListOf<Triple<String, String, Int>>()
+
+        for (link in doc.select("a[href*='/series/']")) {
+            val href = link.attr("href")
+            val seriesId = href.substringAfter("/series/").substringBefore("/")
+            val seriesSlugHref = href.substringAfter("/series/").substringAfter("/")
+            val titleText = link.text().trim()
+            if (seriesId.isNotBlank() && seriesId != href) {
+                val score = TitleMatcher.matchScore(seriesTitle, titleText, seriesSlugHref)
+                if (score > 0) {
+                    candidates.add(Triple(seriesId, titleText, score))
+                }
+            }
+        }
+
+        val sorted = candidates.distinctBy { it.first }.sortedByDescending { it.third }
+        for (cand in sorted.take(3)) {
+            val bestSeriesId = cand.first
+            val chListUrl = "https://weebcentral.com/series/$bestSeriesId/full-chapter-list"
+            val chListReq = Request.Builder().url(chListUrl).build()
+            val chListHtml = runCatching {
+                NetworkClient.okHttp.newCall(chListReq).execute().use { it.body?.string().orEmpty() }
+            }.getOrNull() ?: continue
+
+            val chDoc = Jsoup.parse(chListHtml, chListUrl)
+            val chapters = mutableListOf<Chapter>()
+
+            for (link in chDoc.select("a[href*='/chapters/']")) {
+                val text = link.text()
+                val href = link.attr("href")
+                val match = Regex("(?:chapter|ch|episode|ep)[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $href")
+                if (match != null) {
+                    val numStr = match.groupValues[1]
+                    val chId = href.substringAfter("/chapters/").substringBefore("/")
                     chapters.add(
                         Chapter(
-                            title = "Chapter $num",
-                            slug = "$seriesSlug-chapter-$num",
-                            number = num
+                            title = "Chapter $numStr",
+                            slug = "$seriesSlug-ch-$chId",
+                            number = numStr
                         )
                     )
                 }
             }
+            if (chapters.isNotEmpty()) {
+                return chapters.distinctBy { it.number }.sortedWith { a, b ->
+                    val aNum = a.number.toFloatOrNull() ?: 0f
+                    val bNum = b.number.toFloatOrNull() ?: 0f
+                    aNum.compareTo(bNum)
+                }
+            }
         }
-        return chapters
+
+        return emptyList()
     }
 }
 
@@ -269,99 +425,98 @@ object ManhwaSource {
 
         val doc = Jsoup.parse(searchHtml, searchUrl)
         val mangaLinks = doc.select(".c-tabs-item__content a[href*='/manga/'], .post-title a[href*='/manga/'], a[href*='/manga/']")
-        var matchedMangaUrl: String? = null
+        val candidates = mutableListOf<Triple<String, String, Int>>()
 
         for (link in mangaLinks) {
             val href = link.absUrl("href").trimEnd('/')
             if (href.contains("/chapter")) continue
-            val candidateTitle = link.text()
+            val candidateTitle = link.text().trim()
             val slugFromHref = href.substringAfterLast("/")
-            if (candidateTitle.isNotBlank() && (TitleMatcher.titlesMatch(seriesTitle, candidateTitle) || TitleMatcher.titlesMatch(seriesTitle, slugFromHref))) {
-                matchedMangaUrl = href
-                break
+            val score = TitleMatcher.matchScore(seriesTitle, candidateTitle, slugFromHref)
+            if (score > 0) {
+                candidates.add(Triple(href, candidateTitle, score))
             }
         }
 
-        // Fallback to first non-chapter manga link
-        if (matchedMangaUrl.isNullOrBlank()) {
-            for (link in mangaLinks) {
-                val href = link.absUrl("href").trimEnd('/')
-                if (!href.contains("/chapter") && href.contains("/manga/")) {
-                    matchedMangaUrl = href
-                    break
-                }
-            }
-        }
-
-        if (matchedMangaUrl.isNullOrBlank()) return emptyList()
+        val sortedCandidates = candidates.distinctBy { it.first }.sortedByDescending { it.third }
+        if (sortedCandidates.isEmpty()) return emptyList()
 
         val cleanChNum = chapterNum.trim()
-        val targetChapterUrl = "$matchedMangaUrl/chapter-$cleanChNum/"
 
-        var chapterReq = Request.Builder().url(targetChapterUrl).build()
-        var chapterHtml = runCatching {
-            NetworkClient.okHttp.newCall(chapterReq).execute().use { res ->
-                if (res.isSuccessful) res.body?.string().orEmpty() else ""
-            }
-        }.getOrNull().orEmpty()
+        for (cand in sortedCandidates.take(3)) {
+            val matchedMangaUrl = cand.first
+            val targetChapterUrl = "$matchedMangaUrl/chapter-$cleanChNum/"
 
-        // Fallback to manga page to extract chapter link if direct URL didn't resolve
-        if (chapterHtml.isBlank()) {
-            val baseMangaUrl = matchedMangaUrl.trimEnd('/')
-            val ajaxReq = Request.Builder()
-                .url("$baseMangaUrl/ajax/chapters/")
-                .post(ByteArray(0).toRequestBody())
-                .header("Referer", "$baseMangaUrl/")
-                .build()
-            var ajaxHtml = runCatching {
-                NetworkClient.okHttp.newCall(ajaxReq).execute().use { it.body?.string().orEmpty() }
+            var chapterReq = Request.Builder().url(targetChapterUrl).build()
+            var chapterHtml = runCatching {
+                NetworkClient.okHttp.newCall(chapterReq).execute().use { res ->
+                    if (res.isSuccessful) res.body?.string().orEmpty() else ""
+                }
             }.getOrNull().orEmpty()
 
-            if (ajaxHtml.isBlank()) {
-                val mangaReq = Request.Builder().url(baseMangaUrl).build()
-                ajaxHtml = runCatching {
-                    NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
+            // Fallback to manga page to extract chapter link if direct URL didn't resolve
+            if (chapterHtml.isBlank()) {
+                val baseMangaUrl = matchedMangaUrl.trimEnd('/')
+                val ajaxReq = Request.Builder()
+                    .url("$baseMangaUrl/ajax/chapters/")
+                    .post(ByteArray(0).toRequestBody())
+                    .header("Referer", "$baseMangaUrl/")
+                    .build()
+                var ajaxHtml = runCatching {
+                    NetworkClient.okHttp.newCall(ajaxReq).execute().use { it.body?.string().orEmpty() }
                 }.getOrNull().orEmpty()
-            }
 
-            if (ajaxHtml.isNotBlank()) {
-                val mangaDoc = Jsoup.parse(ajaxHtml, baseMangaUrl)
-                val chLinks = mangaDoc.select(".wp-manga-chapter a, #manga-chapters-holder a, li.sub-chap a")
-                for (link in chLinks) {
-                    val absHref = link.absUrl("href").trimEnd('/')
-                    if (!absHref.startsWith(baseMangaUrl, ignoreCase = true)) continue
-                    val text = link.text()
-                    val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $absHref")
-                    if (match != null) {
-                        val num = match.groupValues[1]
-                        if (num == cleanChNum || num.toFloatOrNull() == cleanChNum.toFloatOrNull()) {
-                            chapterReq = Request.Builder().url(absHref).build()
-                            chapterHtml = runCatching {
-                                NetworkClient.okHttp.newCall(chapterReq).execute().use { it.body?.string().orEmpty() }
-                            }.getOrNull().orEmpty()
-                            break
+                if (ajaxHtml.isBlank()) {
+                    val mangaReq = Request.Builder().url(baseMangaUrl).build()
+                    ajaxHtml = runCatching {
+                        NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
+                    }.getOrNull().orEmpty()
+                }
+
+                if (ajaxHtml.isNotBlank()) {
+                    val mangaDoc = Jsoup.parse(ajaxHtml, baseMangaUrl)
+                    val chLinks = mangaDoc.select(".wp-manga-chapter a, #manga-chapters-holder a, li.sub-chap a")
+                    for (link in chLinks) {
+                        val absHref = link.absUrl("href").trimEnd('/')
+                        if (!absHref.startsWith(baseMangaUrl, ignoreCase = true)) continue
+                        val text = link.text()
+                        val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $absHref")
+                        if (match != null) {
+                            val num = match.groupValues[1]
+                            if (num == cleanChNum || num.toFloatOrNull() == cleanChNum.toFloatOrNull()) {
+                                chapterReq = Request.Builder().url(absHref).build()
+                                chapterHtml = runCatching {
+                                    NetworkClient.okHttp.newCall(chapterReq).execute().use { it.body?.string().orEmpty() }
+                                }.getOrNull().orEmpty()
+                                break
+                            }
                         }
                     }
                 }
             }
-        }
 
-        if (chapterHtml.isBlank()) return emptyList()
-
-        val chapterDoc = Jsoup.parse(chapterHtml, targetChapterUrl)
-        val images = mutableListOf<String>()
-        val imgElements = chapterDoc.select(".reading-content img, #readerarea img, .entry-content img, img[src*='manga_']")
-        for (img in imgElements) {
-            val src = img.attr("data-src").ifBlank { img.attr("src") }.trim()
-            if (src.isNotBlank() && !src.contains("LOGO") && !src.contains("wp-content/uploads") && !src.contains("placeholder")) {
-                images.add(src)
+            if (chapterHtml.isNotBlank()) {
+                val chapterDoc = Jsoup.parse(chapterHtml, targetChapterUrl)
+                val images = mutableListOf<String>()
+                val imgElements = chapterDoc.select(".reading-content img, #readerarea img, .entry-content img, img[src*='manga_']")
+                for (img in imgElements) {
+                    val src = img.attr("data-src").ifBlank { img.attr("src") }.trim()
+                    if (src.isNotBlank() && !src.contains("LOGO") && !src.contains("wp-content/uploads") && !src.contains("placeholder")) {
+                        images.add(src)
+                    }
+                }
+                if (images.isNotEmpty()) {
+                    return images
+                }
             }
         }
-        return images
+
+        return emptyList()
     }
 
     fun fetchLiveChapters(seriesTitle: String, seriesSlug: String): List<Chapter> {
-        val encodedQuery = URLEncoder.encode(seriesTitle, "UTF-8")
+        val queryText = TitleMatcher.cleanSearchQuery(seriesTitle)
+        val encodedQuery = URLEncoder.encode(queryText.ifBlank { seriesTitle }, "UTF-8")
         val searchUrl = "https://manhwatop.com/?s=$encodedQuery&post_type=wp-manga"
 
         val searchReq = Request.Builder().url(searchUrl).build()
@@ -371,64 +526,67 @@ object ManhwaSource {
 
         val doc = Jsoup.parse(searchHtml, searchUrl)
         val mangaLinks = doc.select(".c-tabs-item__content a[href*='/manga/'], .post-title a[href*='/manga/'], a[href*='/manga/']")
-        var matchedMangaUrl: String? = null
+        val candidates = mutableListOf<Pair<String, Int>>()
 
         for (link in mangaLinks) {
             val href = link.absUrl("href").trimEnd('/')
             if (href.contains("/chapter")) continue
-            val candidateTitle = link.text()
+            val candidateTitle = link.text().trim()
             val slugFromHref = href.substringAfterLast("/")
-            if (candidateTitle.isNotBlank() && (TitleMatcher.titlesMatch(seriesTitle, candidateTitle) || TitleMatcher.titlesMatch(seriesTitle, slugFromHref))) {
-                matchedMangaUrl = href
-                break
+            val score = TitleMatcher.matchScore(seriesTitle, candidateTitle, slugFromHref)
+            if (score > 0 && href.isNotBlank()) {
+                candidates.add(Pair(href, score))
             }
         }
 
-        if (matchedMangaUrl.isNullOrBlank()) return emptyList()
-        val baseMangaUrl = matchedMangaUrl.trimEnd('/')
-
-        val ajaxReq = Request.Builder()
-            .url("$baseMangaUrl/ajax/chapters/")
-            .post(ByteArray(0).toRequestBody())
-            .header("Referer", "$baseMangaUrl/")
-            .build()
-        var chaptersHtml = runCatching {
-            NetworkClient.okHttp.newCall(ajaxReq).execute().use { it.body?.string().orEmpty() }
-        }.getOrNull().orEmpty()
-
-        if (chaptersHtml.isBlank()) {
-            val mangaReq = Request.Builder().url(baseMangaUrl).build()
-            chaptersHtml = runCatching {
-                NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
+        val sorted = candidates.distinctBy { it.first }.sortedByDescending { it.second }
+        for (cand in sorted.take(3)) {
+            val baseMangaUrl = cand.first.trimEnd('/')
+            val ajaxReq = Request.Builder()
+                .url("$baseMangaUrl/ajax/chapters/")
+                .post(ByteArray(0).toRequestBody())
+                .header("Referer", "$baseMangaUrl/")
+                .build()
+            var chaptersHtml = runCatching {
+                NetworkClient.okHttp.newCall(ajaxReq).execute().use { it.body?.string().orEmpty() }
             }.getOrNull().orEmpty()
-        }
 
-        if (chaptersHtml.isBlank()) return emptyList()
+            if (chaptersHtml.isBlank()) {
+                val mangaReq = Request.Builder().url(baseMangaUrl).build()
+                chaptersHtml = runCatching {
+                    NetworkClient.okHttp.newCall(mangaReq).execute().use { it.body?.string().orEmpty() }
+                }.getOrNull().orEmpty()
+            }
 
-        val mangaDoc = Jsoup.parse(chaptersHtml, baseMangaUrl)
-        val chLinks = mangaDoc.select(".wp-manga-chapter a, #manga-chapters-holder a, li.sub-chap a")
-        val chapters = mutableListOf<Chapter>()
-        val seen = mutableSetOf<String>()
-        for (link in chLinks) {
-            val absHref = link.absUrl("href").trimEnd('/')
-            if (!absHref.startsWith(baseMangaUrl, ignoreCase = true)) continue
+            if (chaptersHtml.isBlank()) continue
 
-            val text = link.text()
-            val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $absHref")
-            if (match != null) {
-                val num = match.groupValues[1]
-                if (seen.add(num)) {
-                    chapters.add(
-                        Chapter(
-                            title = "Chapter $num",
-                            slug = "$seriesSlug-chapter-$num",
-                            number = num
+            val mangaDoc = Jsoup.parse(chaptersHtml, baseMangaUrl)
+            val chLinks = mangaDoc.select(".wp-manga-chapter a, #manga-chapters-holder a, li.sub-chap a")
+            val chapters = mutableListOf<Chapter>()
+            val seen = mutableSetOf<String>()
+            for (link in chLinks) {
+                val absHref = link.absUrl("href").trimEnd('/')
+                if (!absHref.startsWith(baseMangaUrl, ignoreCase = true)) continue
+
+                val text = link.text()
+                val match = Regex("chapter[- ]+(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find("$text $absHref")
+                if (match != null) {
+                    val num = match.groupValues[1]
+                    if (seen.add(num)) {
+                        chapters.add(
+                            Chapter(
+                                title = "Chapter $num",
+                                slug = "$seriesSlug-chapter-$num",
+                                number = num
+                            )
                         )
-                    )
+                    }
                 }
             }
+            if (chapters.isNotEmpty()) return chapters
         }
-        return chapters
+
+        return emptyList()
     }
 }
 
@@ -590,7 +748,7 @@ object MangaDexSource {
         }
         if (matchedMangaId.isNullOrBlank()) return emptyList()
 
-        val feedUrl = "https://api.mangadex.org/manga/$matchedMangaId/feed?limit=500&order[chapter]=desc"
+        val feedUrl = "https://api.mangadex.org/manga/$matchedMangaId/feed?limit=500&order[chapter]=desc&translatedLanguage[]=en"
         val feedReq = Request.Builder().url(feedUrl).build()
         val feedStr = runCatching {
             NetworkClient.okHttp.newCall(feedReq).execute().use { it.body?.string().orEmpty() }
@@ -656,6 +814,7 @@ object ShiroSource {
 
 object ChapterLoader {
     fun loadChapter(
+        context: Context?,
         group: String,
         type: String,
         seriesTitle: String,
@@ -678,20 +837,24 @@ object ChapterLoader {
         }
 
         val titlesToTry = listOfNotNull(englishName, seriesTitle, nativeName).distinct()
-        val isManhwa = type.equals("Manhwa", ignoreCase = true)
+        val isManhwaOrManhua = type.equals("Manhwa", ignoreCase = true) || type.equals("Manhua", ignoreCase = true)
 
-        if (isManhwa) {
+        if (isManhwaOrManhua) {
+            for (title in titlesToTry) {
+                val wcImages = runCatching { WeebCentralSource.fetchChapterImages(title, chapterNum) }.getOrNull()
+                if (!wcImages.isNullOrEmpty()) return wcImages
+            }
             for (title in titlesToTry) {
                 val mwImages = runCatching { ManhwaSource.fetchChapterImages(title, chapterNum) }.getOrNull()
                 if (!mwImages.isNullOrEmpty()) return mwImages
             }
             for (title in titlesToTry) {
-                val mdxImages = runCatching { MangaDexSource.fetchChapterImages(title, chapterNum, dataSaver) }.getOrNull()
-                if (!mdxImages.isNullOrEmpty()) return mdxImages
-            }
-            for (title in titlesToTry) {
                 val mpImages = runCatching { MangaPillSource.fetchChapterImages(title, chapterNum) }.getOrNull()
                 if (!mpImages.isNullOrEmpty()) return mpImages
+            }
+            for (title in titlesToTry) {
+                val mdxImages = runCatching { MangaDexSource.fetchChapterImages(title, chapterNum, dataSaver) }.getOrNull()
+                if (!mdxImages.isNullOrEmpty()) return mdxImages
             }
         } else {
             for (title in titlesToTry) {
@@ -699,13 +862,28 @@ object ChapterLoader {
                 if (!mpImages.isNullOrEmpty()) return mpImages
             }
             for (title in titlesToTry) {
-                val mdxImages = runCatching { MangaDexSource.fetchChapterImages(title, chapterNum, dataSaver) }.getOrNull()
-                if (!mdxImages.isNullOrEmpty()) return mdxImages
+                val wcImages = runCatching { WeebCentralSource.fetchChapterImages(title, chapterNum) }.getOrNull()
+                if (!wcImages.isNullOrEmpty()) return wcImages
             }
             for (title in titlesToTry) {
                 val mwImages = runCatching { ManhwaSource.fetchChapterImages(title, chapterNum) }.getOrNull()
                 if (!mwImages.isNullOrEmpty()) return mwImages
             }
+            for (title in titlesToTry) {
+                val mdxImages = runCatching { MangaDexSource.fetchChapterImages(title, chapterNum, dataSaver) }.getOrNull()
+                if (!mdxImages.isNullOrEmpty()) return mdxImages
+            }
+        }
+
+        // Fallback: mkissa.to (AllManga) via WebView for AllManga-sourced series
+        if (context != null && group.equals("AllManga", ignoreCase = true)) {
+            val mkImages = runCatching {
+                val mangaId = MkissaSource.findMangaId(seriesTitle)
+                if (mangaId != null) {
+                    MkissaSource.fetchChapterImages(context, mangaId, chapterNum)
+                } else null
+            }.getOrNull()
+            if (!mkImages.isNullOrEmpty()) return mkImages
         }
 
         return emptyList()
@@ -717,38 +895,52 @@ object ChapterLoader {
         seriesSlug: String,
         seriesTitle: String,
         englishName: String?,
-        nativeName: String?
+        nativeName: String?,
+        currentMaxChapter: Float = 0f
     ): List<Chapter> {
-        val titlesToTry = listOfNotNull(englishName, seriesTitle, nativeName).distinct()
-        val isManhwa = type.equals("Manhwa", ignoreCase = true)
+        val titlesToTry = listOfNotNull(
+            seriesTitle,
+            englishName,
+            TitleMatcher.cleanSearchQuery(seriesTitle),
+            nativeName
+        ).distinct()
+        val isManhwaOrManhua = type.equals("Manhwa", ignoreCase = true) || type.equals("Manhua", ignoreCase = true)
 
-        if (isManhwa) {
-            for (title in titlesToTry) {
-                val chs = runCatching { ManhwaSource.fetchLiveChapters(title, seriesSlug) }.getOrNull()
-                if (!chs.isNullOrEmpty()) return chs
-            }
-            for (title in titlesToTry) {
-                val chs = runCatching { MangaDexSource.fetchLiveChapters(title, seriesSlug) }.getOrNull()
-                if (!chs.isNullOrEmpty()) return chs
-            }
-            for (title in titlesToTry) {
-                val chs = runCatching { MangaPillSource.fetchLiveChapters(title, seriesSlug) }.getOrNull()
-                if (!chs.isNullOrEmpty()) return chs
-            }
+        val sources: List<(String, String) -> List<Chapter>> = if (isManhwaOrManhua) {
+            listOf(
+                { t, s -> WeebCentralSource.fetchLiveChapters(t, s) },
+                { t, s -> ManhwaSource.fetchLiveChapters(t, s) },
+                { t, s -> MangaPillSource.fetchLiveChapters(t, s) },
+                { t, s -> MangaDexSource.fetchLiveChapters(t, s) }
+            )
         } else {
+            listOf(
+                { t, s -> WeebCentralSource.fetchLiveChapters(t, s) },
+                { t, s -> MangaPillSource.fetchLiveChapters(t, s) },
+                { t, s -> MangaDexSource.fetchLiveChapters(t, s) },
+                { t, s -> ManhwaSource.fetchLiveChapters(t, s) }
+            )
+        }
+
+        var fallbackChapters = emptyList<Chapter>()
+        var fallbackMax = 0f
+
+        for (source in sources) {
             for (title in titlesToTry) {
-                val chs = runCatching { MangaPillSource.fetchLiveChapters(title, seriesSlug) }.getOrNull()
-                if (!chs.isNullOrEmpty()) return chs
-            }
-            for (title in titlesToTry) {
-                val chs = runCatching { MangaDexSource.fetchLiveChapters(title, seriesSlug) }.getOrNull()
-                if (!chs.isNullOrEmpty()) return chs
-            }
-            for (title in titlesToTry) {
-                val chs = runCatching { ManhwaSource.fetchLiveChapters(title, seriesSlug) }.getOrNull()
-                if (!chs.isNullOrEmpty()) return chs
+                val chs = runCatching { source(title, seriesSlug) }.getOrNull()
+                if (!chs.isNullOrEmpty()) {
+                    val maxNum = chs.mapNotNull { it.number.toFloatOrNull() }.maxOrNull() ?: 0f
+                    if (maxNum > currentMaxChapter) {
+                        return chs
+                    }
+                    if (maxNum > fallbackMax || fallbackChapters.isEmpty()) {
+                        fallbackMax = maxNum
+                        fallbackChapters = chs
+                    }
+                }
             }
         }
-        return emptyList()
+
+        return fallbackChapters
     }
 }

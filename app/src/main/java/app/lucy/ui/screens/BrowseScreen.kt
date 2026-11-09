@@ -48,10 +48,15 @@ fun BrowseScreen(
 ) {
     val types = listOf("All", "Manga", "Manhwa", "Manhua")
     val genres = listOf(
-        "All", "Action", "Adventure", "Comedy", "Drama", "Fantasy",
-        "Historical", "Horror", "Isekai", "Martial Arts", "Mystery",
-        "Psychological", "Romance", "School", "Sci-Fi", "Slice of Life",
-        "Sports", "Supernatural", "Yuri"
+        "All",
+        "Action", "Adventure", "Comedy", "Cooking", "Crime", "Demons",
+        "Drama", "Ecchi", "Fantasy", "Game", "Gender Bender", "Harem",
+        "Historical", "Horror", "Isekai", "Josei", "Magic", "Martial Arts",
+        "Mature", "Mecha", "Military", "Music", "Mystery", "One Shot",
+        "Psychological", "Reincarnation", "Romance", "School", "Sci-Fi",
+        "Seinen", "Shoujo", "Shoujo Ai", "Shounen", "Shounen Ai",
+        "Slice of Life", "Sports", "Super Power", "Supernatural",
+        "Survival", "Thriller", "Tragedy", "Vampire", "Webtoons", "Yaoi", "Yuri"
     )
 
     var selectedType by rememberSaveable { mutableStateOf("All") }

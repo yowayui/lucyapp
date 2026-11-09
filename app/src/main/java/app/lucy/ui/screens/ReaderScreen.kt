@@ -161,6 +161,7 @@ fun ReaderScreen(
             val isDataSaver = userDb.getSetting("image_quality", "data-saver") == "data-saver"
 
             val imgs = ChapterLoader.loadChapter(
+                context = context,
                 group = group,
                 type = mtype,
                 seriesTitle = title,

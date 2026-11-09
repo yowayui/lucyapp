@@ -97,7 +97,9 @@ fun SeriesScreen(
                 userDb.cleanBogusExtraChapters(slug, maxBase)
             }
             val extraChs = userDb.getExtraChapters(slug)
-            val combined = (baseChs + extraChs).distinctBy { it.number }.sortedWith { a, b ->
+            val combined = (baseChs + extraChs).distinctBy {
+                it.number.toFloatOrNull() ?: it.number
+            }.sortedWith { a, b ->
                 val aNum = a.number.toFloatOrNull() ?: 0f
                 val bNum = b.number.toFloatOrNull() ?: 0f
                 aNum.compareTo(bNum)
@@ -125,20 +127,24 @@ fun SeriesScreen(
             if (System.currentTimeMillis() - lastChecked > ttl) {
                 withContext(Dispatchers.IO) {
                     try {
+                        val currentMax = chapters.mapNotNull { it.number.toFloatOrNull() }.maxOrNull() ?: 0f
                         val liveChapters = ChapterLoader.fetchLiveChapters(
                             group = target.sourceGroup,
                             type = target.type,
                             seriesSlug = target.slug,
                             seriesTitle = target.title,
                             englishName = target.englishName,
-                            nativeName = target.nativeName
+                            nativeName = target.nativeName,
+                            currentMaxChapter = currentMax
                         )
                         userDb.markSeriesChecked(slug, liveChapters.size)
                         if (liveChapters.isNotEmpty()) {
-                            userDb.replaceExtraChapters(slug, liveChapters)
+                            userDb.saveExtraChapters(slug, liveChapters)
                             val baseChs = catalogDb.getChapters(slug)
                             val extraChs = userDb.getExtraChapters(slug)
-                            val combined = (baseChs + extraChs).distinctBy { it.number }.sortedWith { a, b ->
+                            val combined = (baseChs + extraChs).distinctBy {
+                                it.number.toFloatOrNull() ?: it.number
+                            }.sortedWith { a, b ->
                                 val aNum = a.number.toFloatOrNull() ?: 0f
                                 val bNum = b.number.toFloatOrNull() ?: 0f
                                 aNum.compareTo(bNum)
@@ -203,6 +209,7 @@ fun SeriesScreen(
                         IconButton(onClick = {
                             scope.launch {
                                 isCheckingUpdates = true
+                                val currentMax = chapters.mapNotNull { it.number.toFloatOrNull() }.maxOrNull() ?: 0f
                                 val newChapters = withContext(Dispatchers.IO) {
                                     ChapterLoader.fetchLiveChapters(
                                         group = item.sourceGroup,
@@ -210,27 +217,33 @@ fun SeriesScreen(
                                         seriesSlug = item.slug,
                                         seriesTitle = item.title,
                                         englishName = item.englishName,
-                                        nativeName = item.nativeName
+                                        nativeName = item.nativeName,
+                                        currentMaxChapter = currentMax
                                     )
                                 }
-                                if (newChapters.isNotEmpty()) {
-                                    withContext(Dispatchers.IO) {
-                                        userDb.replaceExtraChapters(slug, newChapters)
-                                        userDb.markSeriesChecked(slug, newChapters.size)
-                                        val baseChs = catalogDb.getChapters(slug)
-                                        val extraChs = userDb.getExtraChapters(slug)
-                                        val combined = (baseChs + extraChs).distinctBy { it.number }.sortedWith { a, b ->
-                                            val aNum = a.number.toFloatOrNull() ?: 0f
-                                            val bNum = b.number.toFloatOrNull() ?: 0f
-                                            aNum.compareTo(bNum)
-                                        }
+                                val addedCount = withContext(Dispatchers.IO) {
+                                    if (newChapters.isNotEmpty()) {
+                                        userDb.saveExtraChapters(slug, newChapters)
+                                    }
+                                    userDb.markSeriesChecked(slug, newChapters.size)
+                                    val baseChs = catalogDb.getChapters(slug)
+                                    val extraChs = userDb.getExtraChapters(slug)
+                                    val combined = (baseChs + extraChs).distinctBy {
+                                        it.number.toFloatOrNull() ?: it.number
+                                    }.sortedWith { a, b ->
+                                        val aNum = a.number.toFloatOrNull() ?: 0f
+                                        val bNum = b.number.toFloatOrNull() ?: 0f
+                                        aNum.compareTo(bNum)
+                                    }
+                                    val prevCount = chapters.size
+                                    withContext(Dispatchers.Main) {
                                         chapters = if (isAscending) combined else combined.reversed()
                                     }
-                                    Toast.makeText(context, "Chapters updated: ${chapters.size} total", Toast.LENGTH_SHORT).show()
+                                    combined.size - prevCount
+                                }
+                                if (addedCount > 0) {
+                                    Toast.makeText(context, "$addedCount new chapter${if (addedCount > 1) "s" else ""} added!", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    withContext(Dispatchers.IO) {
-                                        userDb.markSeriesChecked(slug, 0)
-                                    }
                                     Toast.makeText(context, "Catalog up to date", Toast.LENGTH_SHORT).show()
                                 }
                                 isCheckingUpdates = false

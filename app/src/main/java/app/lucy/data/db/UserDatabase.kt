@@ -275,7 +275,7 @@ class UserDatabase(context: Context) : SQLiteOpenHelper(context, "user_data.db",
         writableDatabase.execSQL(
             "CREATE TABLE IF NOT EXISTS extra_chapters (series_slug TEXT NOT NULL, slug TEXT NOT NULL, number TEXT NOT NULL, title TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (series_slug, slug));"
         )
-        val maxAllowed = maxValidChapterNumber + 50f
+        val maxAllowed = maxValidChapterNumber + 1000f
         val toDelete = mutableListOf<String>()
         readableDatabase.rawQuery(
             "SELECT slug, number FROM extra_chapters WHERE series_slug = ?",
@@ -284,7 +284,7 @@ class UserDatabase(context: Context) : SQLiteOpenHelper(context, "user_data.db",
             while (cursor.moveToNext()) {
                 val chSlug = cursor.getString(0)
                 val num = cursor.getString(1).toFloatOrNull()
-                if (num == null || num > maxAllowed) {
+                if (num == null || num < 0f || num > maxAllowed) {
                     toDelete.add(chSlug)
                 }
             }

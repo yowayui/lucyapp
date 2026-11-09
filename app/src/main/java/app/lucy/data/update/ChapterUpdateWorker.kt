@@ -54,20 +54,22 @@ class ChapterUpdateWorker(
             }
 
             try {
+                val baseChs = catalogDb.getChapters(slug)
+                val extraChs = userDb.getExtraChapters(slug)
+                val currentMax = (baseChs + extraChs).mapNotNull { it.number.toFloatOrNull() }.maxOrNull() ?: 0f
                 val liveChapters = ChapterLoader.fetchLiveChapters(
                     group = item.sourceGroup,
                     type = item.type,
                     seriesSlug = item.slug,
                     seriesTitle = item.title,
                     englishName = item.englishName,
-                    nativeName = item.nativeName
+                    nativeName = item.nativeName,
+                    currentMaxChapter = currentMax
                 )
 
                 if (liveChapters.isNotEmpty()) {
-                    val baseChs = catalogDb.getChapters(slug)
-                    val extraChs = userDb.getExtraChapters(slug)
-                    val existingNums = (baseChs + extraChs).map { it.number }.toSet()
-                    val newChapters = liveChapters.filter { !existingNums.contains(it.number) }
+                    val existingNums = (baseChs + extraChs).map { it.number.toFloatOrNull() ?: it.number }.toSet()
+                    val newChapters = liveChapters.filter { !existingNums.contains(it.number.toFloatOrNull() ?: it.number) }
 
                     if (newChapters.isNotEmpty()) {
                         userDb.saveExtraChapters(slug, newChapters)
