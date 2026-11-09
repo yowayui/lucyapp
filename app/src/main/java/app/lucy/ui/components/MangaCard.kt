@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.lucy.data.model.MangaItem
+import app.lucy.data.source.CoverResolver
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 
@@ -54,10 +55,11 @@ fun MangaCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
             )
 
-            if (!manga.thumb.isNullOrBlank()) {
+            val cover = CoverResolver.resolve(manga.slug, manga.thumb)
+            if (!cover.isNullOrBlank()) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(manga.thumb)
+                        .data(cover)
                         .crossfade(true)
                         .build(),
                     contentDescription = manga.title,

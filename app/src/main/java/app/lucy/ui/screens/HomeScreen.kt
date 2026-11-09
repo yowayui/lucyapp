@@ -54,6 +54,7 @@ import app.lucy.data.db.CatalogDatabase
 import app.lucy.data.db.UserDatabase
 import app.lucy.data.model.HistoryItem
 import app.lucy.data.model.MangaItem
+import app.lucy.data.source.CoverResolver
 import app.lucy.ui.components.MangaCard
 import app.lucy.ui.theme.Newsreader
 import coil.compose.AsyncImage
@@ -166,7 +167,7 @@ fun HomeScreen(
                                 .clickable { onMangaClick(item.slug) }
                         ) {
                             AsyncImage(
-                                model = item.thumb,
+                                model = CoverResolver.resolve(item.slug, item.thumb),
                                 contentDescription = item.title,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()
@@ -316,9 +317,10 @@ fun HomeScreen(
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(MaterialTheme.colorScheme.surface)
                                 ) {
-                                    if (!item.thumb.isNullOrBlank()) {
+                                    val cover = CoverResolver.resolve(item.slug, item.thumb)
+                                    if (!cover.isNullOrBlank()) {
                                         AsyncImage(
-                                            model = item.thumb,
+                                            model = cover,
                                             contentDescription = item.title,
                                             contentScale = ContentScale.Crop,
                                             modifier = Modifier.fillMaxSize()

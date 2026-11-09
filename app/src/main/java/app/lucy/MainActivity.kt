@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
                 )
 
                 val showBottomBar = currentRoute in bottomBarRoutes
+                val isReaderRoute = currentRoute?.startsWith("reader/") == true
 
                 fun openReader(seriesSlug: String, chapterSlug: String, chapterNum: String) {
                     val encSeries = URLEncoder.encode(seriesSlug, "UTF-8")
@@ -158,7 +159,11 @@ class MainActivity : ComponentActivity() {
                     NavHost(
                         navController = navController,
                         startDestination = Screen.Home.route,
-                        modifier = Modifier.padding(innerPadding)
+                        modifier = if (isReaderRoute) {
+                            Modifier.fillMaxSize()
+                        } else {
+                            Modifier.padding(innerPadding)
+                        }
                     ) {
                         composable(Screen.Home.route) {
                             HomeScreen(

@@ -34,8 +34,12 @@ object NetworkClient {
         "mkissa.to" to listOf(InetAddress.getByName("172.67.187.90"), InetAddress.getByName("104.21.56.175")),
         "api.mkissa.net" to listOf(InetAddress.getByName("172.67.187.90"), InetAddress.getByName("104.21.56.175")),
         "cdn.mkissa.net" to listOf(InetAddress.getByName("172.67.187.90"), InetAddress.getByName("104.21.56.175")),
-        "wp.youtube-anime.com" to listOf(InetAddress.getByName("172.67.2.119"), InetAddress.getByName("104.21.54.102")),
-        "ytimgf.youtube-anime.com" to listOf(InetAddress.getByName("172.67.2.119"), InetAddress.getByName("104.21.54.102"))
+        "wp.youtube-anime.com" to listOf(InetAddress.getByName("104.21.86.174"), InetAddress.getByName("172.67.223.73")),
+        "ytimgf.youtube-anime.com" to listOf(InetAddress.getByName("104.21.86.174"), InetAddress.getByName("172.67.223.73")),
+        "s4.anilist.co" to listOf(InetAddress.getByName("104.26.14.71"), InetAddress.getByName("104.26.15.71"), InetAddress.getByName("172.67.71.232")),
+        "cdn.myanimelist.net" to listOf(InetAddress.getByName("23.203.165.123"), InetAddress.getByName("23.203.165.128")),
+        "cdn.mangaupdates.com" to listOf(InetAddress.getByName("209.38.117.245")),
+        "thumb.mghcdn.com" to listOf(InetAddress.getByName("104.26.12.244"), InetAddress.getByName("104.26.13.244"), InetAddress.getByName("172.67.72.150"))
     )
 
     private val BLOCKED_IPS = setOf("202.3.218.139", "180.131.144.144", "180.131.144.145", "36.86.63.181", "36.86.63.182")
@@ -46,22 +50,22 @@ object NetworkClient {
             val lower = hostname.lowercase()
             dnsCache[lower]?.let { return it }
 
-            STATIC_HOSTS[lower]?.let {
-                dnsCache[lower] = it
-                return it
+            // Keep the static IPs first to bypass ISP DNS poisoning, then append
+            // the system result as a fallback when a hardcoded edge has rotated.
+            val systemIps = runCatching { Dns.SYSTEM.lookup(hostname) }
+                .getOrNull()
+                .orEmpty()
+                .filter { ip -> ip.hostAddress?.let { addr -> !BLOCKED_IPS.contains(addr) } == true }
+
+            val combined = (STATIC_HOSTS[lower].orEmpty() + systemIps)
+                .distinctBy { it.hostAddress }
+
+            if (combined.isNotEmpty()) {
+                dnsCache[lower] = combined
+                return combined
             }
 
-            try {
-                val sysIps = Dns.SYSTEM.lookup(hostname)
-                val cleanIps = sysIps.filter { it.hostAddress?.let { addr -> !BLOCKED_IPS.contains(addr) } == true }
-                if (cleanIps.isNotEmpty()) {
-                    dnsCache[lower] = cleanIps
-                    return cleanIps
-                }
-            } catch (_: Exception) {
-            }
-
-            return Dns.SYSTEM.lookup(hostname)
+            return runCatching { Dns.SYSTEM.lookup(hostname) }.getOrElse { emptyList() }
         }
     }
 

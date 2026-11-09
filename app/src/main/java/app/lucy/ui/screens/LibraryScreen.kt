@@ -49,6 +49,7 @@ import app.lucy.data.db.UserDatabase
 import app.lucy.data.model.BookmarkItem
 import app.lucy.data.model.HistoryItem
 import app.lucy.data.model.MangaItem
+import app.lucy.data.source.CoverResolver
 import app.lucy.ui.components.MangaCard
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
@@ -140,6 +141,7 @@ fun LibraryScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(history) { item ->
+                        val cover = CoverResolver.resolve(item.slug, item.thumb)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -159,9 +161,9 @@ fun LibraryScreen(
                                     .clip(RoundedCornerShape(4.dp))
                                     .background(MaterialTheme.colorScheme.outline)
                             ) {
-                                if (!item.thumb.isNullOrBlank()) {
+                                if (!cover.isNullOrBlank()) {
                                     AsyncImage(
-                                        model = item.thumb,
+                                        model = cover,
                                         contentDescription = item.title,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.fillMaxSize()

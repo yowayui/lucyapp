@@ -60,6 +60,7 @@ import app.lucy.data.model.Chapter
 import app.lucy.data.model.HistoryItem
 import app.lucy.data.model.MangaItem
 import app.lucy.data.source.ChapterLoader
+import app.lucy.data.source.CoverResolver
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -261,7 +262,7 @@ fun SeriesScreen(
                         val newStatus = userDb.toggleBookmark(
                             item.slug,
                             item.title,
-                            item.thumb,
+                            CoverResolver.resolve(item.slug, item.thumb),
                             item.latestChapter
                         )
                         isBookmarked = newStatus
@@ -292,9 +293,10 @@ fun SeriesScreen(
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .border(0.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
                 ) {
-                    if (!item.thumb.isNullOrBlank()) {
+                    val cover = CoverResolver.resolve(item.slug, item.thumb)
+                    if (!cover.isNullOrBlank()) {
                         AsyncImage(
-                            model = item.thumb,
+                            model = cover,
                             contentDescription = item.title,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()

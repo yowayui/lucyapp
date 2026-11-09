@@ -62,13 +62,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.lucy.data.db.CatalogDatabase
 import app.lucy.data.db.UserDatabase
 import app.lucy.data.model.Chapter
 import app.lucy.data.source.ChapterLoader
+import app.lucy.data.source.CoverResolver
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
@@ -99,7 +107,7 @@ fun ReaderScreen(
     var loading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var reloadCount by remember { mutableIntStateOf(0) }
-    var showControls by remember { mutableStateOf(true) }
+    var showControls by remember { mutableStateOf(false) }
     var showChapterSheet by remember { mutableStateOf(false) }
 
     val defaultMode = remember { userDb.getSetting("reader_mode", "webtoon") }
@@ -129,6 +137,32 @@ fun ReaderScreen(
         }
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    // Immersive reading: hide status and navigation bars for the whole session.
+    val view = LocalView.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(view, lifecycleOwner) {
+        val window = view.context.findActivity()?.window
+        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
+
+        fun hideSystemBars() {
+            controller?.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller?.hide(WindowInsetsCompat.Type.systemBars())
+        }
+
+        hideSystemBars()
+
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) hideSystemBars()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            controller?.show(WindowInsetsCompat.Type.systemBars())
         }
     }
 
@@ -181,7 +215,7 @@ fun ReaderScreen(
                 userDb.saveHistory(
                     slug = seriesSlug,
                     title = title,
-                    thumb = series?.thumb,
+                    thumb = CoverResolver.resolve(seriesSlug, series?.thumb),
                     chapterTitle = "Chapter $currentNum",
                     chapterSlug = currentSlug,
                     pageIndex = existingPage,
@@ -236,7 +270,7 @@ fun ReaderScreen(
                 userDb.saveHistory(
                     slug = seriesSlug,
                     title = series?.title ?: seriesSlug,
-                    thumb = series?.thumb,
+                    thumb = CoverResolver.resolve(seriesSlug, series?.thumb),
                     chapterTitle = "Chapter $currentNum",
                     chapterSlug = currentSlug,
                     pageIndex = currentPage - 1,
@@ -704,4 +738,10 @@ fun ReaderScreen(
             }
         }
     }
+}
+
+private tailrec fun android.content.Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
