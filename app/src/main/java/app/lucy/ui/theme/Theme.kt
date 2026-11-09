@@ -30,13 +30,20 @@ private val DarkColorScheme = darkColorScheme(
     onPrimaryContainer = Color.White,
     secondary = DarkMuted,
     onSecondary = Color.Black,
+    secondaryContainer = Color(0xFF2A2A2A),
+    onSecondaryContainer = DarkText,
     background = DarkBackground,
     onBackground = DarkText,
     surface = DarkSurface,
     onSurface = DarkText,
     surfaceVariant = DarkSurfaceVariant,
     onSurfaceVariant = DarkMuted,
-    outline = DarkLine
+    surfaceContainer = Color(0xFF1A1A1A),
+    surfaceContainerHigh = Color(0xFF222222),
+    surfaceContainerHighest = Color(0xFF2A2A2A),
+    outline = DarkLine,
+    outlineVariant = Color(0xFF333333),
+    error = Color(0xFFCF6679)
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -46,13 +53,20 @@ private val LightColorScheme = lightColorScheme(
     onPrimaryContainer = Color.Black,
     secondary = LightMuted,
     onSecondary = Color.White,
+    secondaryContainer = Color(0xFFE0E0E0),
+    onSecondaryContainer = LightText,
     background = LightBackground,
     onBackground = LightText,
     surface = LightSurface,
     onSurface = LightText,
     surfaceVariant = LightSurfaceVariant,
     onSurfaceVariant = LightMuted,
-    outline = LightLine
+    surfaceContainer = Color(0xFFF2F2F2),
+    surfaceContainerHigh = Color(0xFFEAEAEA),
+    surfaceContainerHighest = Color(0xFFE0E0E0),
+    outline = LightLine,
+    outlineVariant = Color(0xFFD0D0D0),
+    error = Color(0xFFB00020)
 )
 
 @Composable
