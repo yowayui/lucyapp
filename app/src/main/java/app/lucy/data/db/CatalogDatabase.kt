@@ -320,6 +320,29 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
                     try {
                         val uncompressed = GZIPInputStream(ByteArrayInputStream(bytes)).bufferedReader().use { it.readText() }
                         val rawList = uncompressed.split(",").filter { it.isNotBlank() }
+                        if (group.endsWith("-ID", ignoreCase = true)) {
+                            // Indonesian sources store "number|chapterPath" entries.
+                            return rawList.map { entry ->
+                                val sep = entry.indexOf('|')
+                                if (sep > 0) {
+                                    val num = entry.substring(0, sep)
+                                    val path = entry.substring(sep + 1)
+                                    Chapter(
+                                        title = "Chapter $num",
+                                        slug = path,
+                                        number = num
+                                    )
+                                } else {
+                                    val num = Regex("""chapter[-_]?([0-9]+(?:\.[0-9]+)?)""", RegexOption.IGNORE_CASE)
+                                        .find(entry)?.groupValues?.getOrNull(1) ?: entry
+                                    Chapter(
+                                        title = "Chapter $num",
+                                        slug = entry,
+                                        number = num
+                                    )
+                                }
+                            }
+                        }
                         return rawList.map { num ->
                             if (group == "Dojing" || group == "ShiroDoujin") {
                                 Chapter(

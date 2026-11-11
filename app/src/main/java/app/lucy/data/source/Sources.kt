@@ -39,7 +39,13 @@ object NetworkClient {
         "s4.anilist.co" to listOf(InetAddress.getByName("104.26.14.71"), InetAddress.getByName("104.26.15.71"), InetAddress.getByName("172.67.71.232")),
         "cdn.myanimelist.net" to listOf(InetAddress.getByName("23.203.165.123"), InetAddress.getByName("23.203.165.128")),
         "cdn.mangaupdates.com" to listOf(InetAddress.getByName("209.38.117.245")),
-        "thumb.mghcdn.com" to listOf(InetAddress.getByName("104.26.12.244"), InetAddress.getByName("104.26.13.244"), InetAddress.getByName("172.67.72.150"))
+        "thumb.mghcdn.com" to listOf(InetAddress.getByName("104.26.12.244"), InetAddress.getByName("104.26.13.244"), InetAddress.getByName("172.67.72.150")),
+        "komiku.org" to listOf(InetAddress.getByName("104.21.40.71"), InetAddress.getByName("172.67.180.174")),
+        "img.komiku.org" to listOf(InetAddress.getByName("104.21.40.71"), InetAddress.getByName("172.67.180.174")),
+        "thumbnail.komiku.to" to listOf(InetAddress.getByName("103.42.245.164")),
+        "komikindo.ch" to listOf(InetAddress.getByName("104.21.49.106"), InetAddress.getByName("172.67.189.191")),
+        "v7.kiryuu.to" to listOf(InetAddress.getByName("104.21.69.249"), InetAddress.getByName("172.67.216.21")),
+        "kiryuu.to" to listOf(InetAddress.getByName("104.21.69.249"), InetAddress.getByName("172.67.216.21"))
     )
 
     private val BLOCKED_IPS = setOf("202.3.218.139", "180.131.144.144", "180.131.144.145", "36.86.63.181", "36.86.63.182")
@@ -93,6 +99,12 @@ object NetworkClient {
                 builder.header("Referer", "https://shirodoujin.com/")
             } else if (host.contains("mkissa") || host.contains("youtube-anime")) {
                 builder.header("Referer", "https://mkissa.to/")
+            } else if (host.contains("komiku")) {
+                builder.header("Referer", "https://komiku.org/")
+            } else if (host.contains("komikindo")) {
+                builder.header("Referer", "https://komikindo.ch/")
+            } else if (host.contains("kiryuu")) {
+                builder.header("Referer", "https://v7.kiryuu.to/")
             }
             chain.proceed(builder.build())
         }
@@ -828,6 +840,22 @@ object ChapterLoader {
         chapterSlug: String,
         dataSaver: Boolean = true
     ): List<String> {
+        // 0. Indonesian sources store the chapter page path directly.
+        if (group.endsWith("-ID", ignoreCase = true)) {
+            val imgs = runCatching {
+                when {
+                    group.startsWith("Komiku", ignoreCase = true) ->
+                        KomikuSource.fetchChapterImages(chapterSlug)
+                    group.startsWith("Komikindo", ignoreCase = true) ->
+                        KomikindoSource.fetchChapterImages(chapterSlug)
+                    group.startsWith("Kiryuu", ignoreCase = true) ->
+                        KiryuuSource.fetchChapterImages(chapterSlug)
+                    else -> emptyList()
+                }
+            }.getOrNull()
+            if (!imgs.isNullOrEmpty()) return imgs
+        }
+
         // 1. Dojing
         if (group.equals("Dojing", ignoreCase = true)) {
             val imgs = runCatching { DojingSource.fetchChapterImages(chapterSlug) }.getOrNull()

@@ -19,11 +19,12 @@ Download the APK, open it, and allow installation from unknown sources when Andr
 ## Features
 
 - **Home**: featured carousel, daily popular ranking, and latest updates in a layout that matches the web reader
-- **Offline catalog**: browse and search about 200,000 series from the bundled catalog, even without a connection
+- **Offline catalog**: browse and search about 220,000 series from the bundled catalog, even without a connection
 - **Reader**: webtoon mode with vertical scrolling or paged mode with horizontal swiping, plus automatic next chapter
 - **Library**: bookmarks, reading history, and per-chapter read markers
 - **Daily updates**: background checks for bookmarked and recently read series, with notifications
 - **Settings**: reader mode, theme, background update toggle, manual update check, and social links
+- **Languages**: filter the catalog by English or Indonesian sources; Indonesian series use Komiku, Komikindo, and Kiryuu chapter pages
 - **Themes**: light and dark, following the system setting by default
 - **No account**: bookmarks, history, and settings stay on the device
 
