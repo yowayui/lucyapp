@@ -3,6 +3,7 @@ package app.lucy.data.db
 import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
+import app.lucy.BuildConfig
 import app.lucy.data.model.Chapter
 import app.lucy.data.model.MangaItem
 import java.io.ByteArrayInputStream
@@ -14,6 +15,8 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
 
     companion object {
         private const val DB_NAME = "lucy_catalog.db"
+        private const val PREFS_NAME = "catalog_db"
+        private const val KEY_VERSION = "catalog_version"
         @Volatile
         private var instance: CatalogDatabase? = null
 
@@ -21,13 +24,23 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
             return instance ?: synchronized(this) {
                 instance ?: run {
                     val dbFile = context.getDatabasePath(DB_NAME)
-                    if (!dbFile.exists() || dbFile.length() < 1000) {
+                    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    // The bundled catalog changes with app versions, so an existing
+                    // copy from a previous install must be replaced after an update.
+                    val bundledVersion = BuildConfig.VERSION_CODE
+                    val installedVersion = prefs.getInt(KEY_VERSION, 0)
+                    val needsCopy = !dbFile.exists() ||
+                        dbFile.length() < 1000 ||
+                        installedVersion != bundledVersion
+                    if (needsCopy) {
                         dbFile.parentFile?.mkdirs()
+                        dbFile.delete()
                         context.assets.open(DB_NAME).use { input ->
                             FileOutputStream(dbFile).use { output ->
                                 input.copyTo(output, bufferSize = 256 * 1024)
                             }
                         }
+                        prefs.edit().putInt(KEY_VERSION, bundledVersion).apply()
                     }
                     val sqliteDb = SQLiteDatabase.openDatabase(
                         dbFile.path,
