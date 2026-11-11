@@ -61,6 +61,7 @@ import app.lucy.data.db.UserDatabase
 import app.lucy.data.update.ChapterUpdateScheduler
 import app.lucy.ui.components.AppUpdate
 import app.lucy.ui.components.AppUpdateChecker
+import app.lucy.ui.components.UpdateCheckResult
 import app.lucy.ui.components.UpdateDialog
 import app.lucy.ui.theme.Newsreader
 import coil.Coil
@@ -498,12 +499,14 @@ fun SettingsScreen(
                             if (checkingAppUpdate) return@clickable
                             checkingAppUpdate = true
                             scope.launch {
-                                val update = AppUpdateChecker.checkLatest(BuildConfig.VERSION_NAME)
+                                val result = AppUpdateChecker.checkLatest(BuildConfig.VERSION_NAME)
                                 checkingAppUpdate = false
-                                if (update != null) {
-                                    updateDialogData = update
-                                } else {
-                                    snackbarHostState.showSnackbar("App is up to date ($versionName)")
+                                when (result) {
+                                    is UpdateCheckResult.Available -> updateDialogData = result.update
+                                    UpdateCheckResult.UpToDate ->
+                                        snackbarHostState.showSnackbar("App is up to date ($versionName)")
+                                    is UpdateCheckResult.Failed ->
+                                        snackbarHostState.showSnackbar("Couldn't check for updates. Try again or open GitHub.")
                                 }
                             }
                         },

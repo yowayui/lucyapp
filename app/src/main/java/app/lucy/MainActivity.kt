@@ -37,6 +37,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import app.lucy.ui.components.AppUpdate
 import app.lucy.ui.components.AppUpdateChecker
+import app.lucy.ui.components.UpdateCheckResult
 import app.lucy.ui.components.UpdateDialog
 import app.lucy.ui.screens.BrowseScreen
 import app.lucy.ui.screens.HomeScreen
@@ -78,9 +79,9 @@ class MainActivity : ComponentActivity() {
                 var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
 
                 LaunchedEffect(Unit) {
-                    val update = AppUpdateChecker.checkLatest(BuildConfig.VERSION_NAME)
-                    if (update != null) {
-                        availableUpdate = update
+                    val result = AppUpdateChecker.checkLatest(BuildConfig.VERSION_NAME)
+                    if (result is UpdateCheckResult.Available) {
+                        availableUpdate = result.update
                     }
                 }
 

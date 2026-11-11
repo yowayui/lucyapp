@@ -59,7 +59,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Request
-import org.json.JSONObject
+import org.jsoup.Jsoup
+import org.jsoup.parser.Parser
 import java.io.File
 import java.io.IOException
 
@@ -71,8 +72,17 @@ data class AppUpdate(
     val apkUrl: String? = null
 )
 
+sealed interface UpdateCheckResult {
+    data class Available(val update: AppUpdate) : UpdateCheckResult
+    object UpToDate : UpdateCheckResult
+    data class Failed(val message: String? = null) : UpdateCheckResult
+}
+
 object AppUpdateChecker {
-    private const val RELEASES_URL = "https://api.github.com/repos/yowayui/lucyapp/releases/latest"
+    private const val REPO = "yowayui/lucyapp"
+    private const val ATOM_URL = "https://github.com/$REPO/releases.atom"
+    private const val LATEST_URL = "https://github.com/$REPO/releases/latest"
+    private const val APK_ASSET = "lucy.apk"
 
     // ponytail: integer triplet comparison. Add pre-release channel parsing when beta tags exist.
     fun isNewer(latest: String, current: String): Boolean {
@@ -87,52 +97,95 @@ object AppUpdateChecker {
         return false
     }
 
-    suspend fun checkLatest(currentVersion: String): AppUpdate? = withContext(Dispatchers.IO) {
-        runCatching {
-            val req = Request.Builder()
-                .url(RELEASES_URL)
-                .header("Accept", "application/vnd.github+json")
-                .header("User-Agent", "lucy-android")
-                .build()
-            val res = NetworkClient.okHttp.newCall(req).execute()
-            if (!res.isSuccessful) return@runCatching null
-            val body = res.body?.string().orEmpty()
-            if (body.isBlank()) return@runCatching null
-
-            val json = JSONObject(body)
-            val tagName = json.optString("tag_name", "").trim()
-            if (!isNewer(tagName, currentVersion)) return@runCatching null
-
-            val notes = json.optString("body", "").trim()
-            val releaseUrl = json.optString("html_url", "https://github.com/yowayui/lucyapp/releases")
-            var downloadUrl = ""
-            var apkUrl: String? = null
-
-            val assets = json.optJSONArray("assets")
-            if (assets != null) {
-                for (i in 0 until assets.length()) {
-                    val asset = assets.getJSONObject(i)
-                    val name = asset.optString("name", "")
-                    if (name.endsWith(".apk", ignoreCase = true)) {
-                        val url = asset.optString("browser_download_url", "").trim()
-                        if (url.isNotBlank()) {
-                            downloadUrl = url
-                            apkUrl = url
-                        }
-                        break
-                    }
-                }
+    // Releases are read from the public Atom feed because the unauthenticated
+    // GitHub REST API is limited to 60 requests per hour per IP, which makes
+    // update checks fail silently on shared networks.
+    suspend fun checkLatest(currentVersion: String): UpdateCheckResult = withContext(Dispatchers.IO) {
+        val atom = runCatching { fetchAtomLatest() }.getOrNull()
+        if (atom != null) {
+            return@withContext if (isNewer(atom.tag, currentVersion)) {
+                UpdateCheckResult.Available(buildUpdate(atom.tag, atom.notes))
+            } else {
+                UpdateCheckResult.UpToDate
             }
-            if (downloadUrl.isBlank()) downloadUrl = releaseUrl
+        }
 
-            AppUpdate(
-                versionName = tagName,
-                changelog = notes,
-                downloadUrl = downloadUrl,
-                releaseUrl = releaseUrl,
-                apkUrl = apkUrl
-            )
-        }.getOrNull()
+        val tag = runCatching { fetchLatestTagViaRedirect() }.getOrNull()
+        if (!tag.isNullOrBlank()) {
+            return@withContext if (isNewer(tag, currentVersion)) {
+                UpdateCheckResult.Available(buildUpdate(tag, ""))
+            } else {
+                UpdateCheckResult.UpToDate
+            }
+        }
+
+        UpdateCheckResult.Failed()
+    }
+
+    private data class AtomRelease(val tag: String, val notes: String)
+
+    private fun fetchAtomLatest(): AtomRelease {
+        val req = Request.Builder()
+            .url(ATOM_URL)
+            .header("Accept", "application/atom+xml")
+            .header("User-Agent", "lucy-android")
+            .build()
+        NetworkClient.okHttp.newCall(req).execute().use { res ->
+            if (!res.isSuccessful) throw IOException("HTTP ${res.code}")
+            val xml = res.body?.string().orEmpty()
+            val doc = Jsoup.parse(xml, "", Parser.xmlParser())
+            val entry = doc.selectFirst("entry") ?: throw IOException("No releases")
+
+            val link = entry.selectFirst("link[rel=alternate]")?.attr("href").orEmpty()
+            val tag = link.substringAfterLast("/tag/", "").ifBlank {
+                entry.selectFirst("id")?.text()?.substringAfterLast('/').orEmpty()
+            }
+            if (tag.isBlank()) throw IOException("No release tag")
+
+            val contentHtml = entry.selectFirst("content")?.wholeText().orEmpty()
+            return AtomRelease(tag.trim(), notesFromHtml(contentHtml))
+        }
+    }
+
+    private fun notesFromHtml(html: String): String {
+        if (html.isBlank()) return ""
+        val body = Jsoup.parse(html).body()
+        val parts = mutableListOf<String>()
+        for (el in body.select("li, p")) {
+            val text = el.text().trim()
+            if (text.isEmpty()) continue
+            parts += if (el.tagName().equals("li", ignoreCase = true)) "• $text" else text
+        }
+        return if (parts.isNotEmpty()) parts.joinToString("\n") else body.text().trim()
+    }
+
+    private fun fetchLatestTagViaRedirect(): String {
+        val client = NetworkClient.okHttp.newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+        val req = Request.Builder()
+            .url(LATEST_URL)
+            .header("User-Agent", "lucy-android")
+            .build()
+        client.newCall(req).execute().use { res ->
+            val location = res.header("Location").orEmpty()
+            val tag = location.substringAfterLast("/tag/", "")
+            if (tag.isBlank()) throw IOException("HTTP ${res.code}")
+            return tag.trim()
+        }
+    }
+
+    private fun buildUpdate(tag: String, notes: String): AppUpdate {
+        val releaseUrl = "https://github.com/$REPO/releases/tag/$tag"
+        val apkUrl = "https://github.com/$REPO/releases/download/$tag/$APK_ASSET"
+        return AppUpdate(
+            versionName = tag,
+            changelog = notes,
+            downloadUrl = apkUrl,
+            releaseUrl = releaseUrl,
+            apkUrl = apkUrl
+        )
     }
 }
 
