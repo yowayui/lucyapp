@@ -39,11 +39,6 @@ The APK ships with an offline catalog of series metadata. Chapter images and pag
 - Coil for image loading
 - SQLite for the bundled catalog and local user data
 
-## Connect
-
-- Instagram: [@y1peh](https://www.instagram.com/y1peh)
-- Email: [yuiwoip@gmail.com](mailto:yuiwoip@gmail.com)
-
 ## License
 
 All rights reserved. See [LICENSE](LICENSE) for details.
