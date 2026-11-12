@@ -63,3 +63,48 @@ object KiryuuSource {
             .distinct()
     }
 }
+
+object IkiruSource {
+    private const val BASE = "https://10.ikiru.wtf"
+
+    fun fetchChapterImages(chapterPath: String): List<String> {
+        // Ikiru chapter paths are stored relative because the public host
+        // rotates between 09/10/... subdomains.
+        val url = if (chapterPath.startsWith("http")) chapterPath else BASE + chapterPath
+        val req = Request.Builder().url(url).build()
+        val html = runCatching {
+            NetworkClient.okHttp.newCall(req).execute().use { it.body?.string().orEmpty() }
+        }.getOrNull() ?: return emptyList()
+
+        val doc = Jsoup.parse(html, url)
+        return doc.select("#reader-scroll img, .rpage img")
+            .mapNotNull { el ->
+                val src = el.absUrl("src").ifBlank { el.attr("src") }
+                if (src.isBlank() || src.startsWith("data:")) null else src
+            }
+            .distinct()
+    }
+}
+
+object BacaKomikSource {
+    private const val BASE = "https://bacakomik.my"
+
+    fun fetchChapterImages(chapterPath: String): List<String> {
+        val url = if (chapterPath.startsWith("http")) chapterPath else BASE + chapterPath
+        val req = Request.Builder().url(url).build()
+        val html = runCatching {
+            NetworkClient.okHttp.newCall(req).execute().use { it.body?.string().orEmpty() }
+        }.getOrNull() ?: return emptyList()
+
+        val doc = Jsoup.parse(html, url)
+        return doc.select("#chimg-auh img")
+            .mapNotNull { el ->
+                val lazy = el.absUrl("data-lazy-src").ifBlank { el.attr("data-lazy-src") }
+                val src = lazy.ifBlank {
+                    el.absUrl("src").ifBlank { el.attr("src") }
+                }
+                if (src.isBlank() || src.startsWith("data:")) null else src
+            }
+            .distinct()
+    }
+}

@@ -45,7 +45,11 @@ object NetworkClient {
         "thumbnail.komiku.to" to listOf(InetAddress.getByName("103.42.245.164")),
         "komikindo.ch" to listOf(InetAddress.getByName("104.21.49.106"), InetAddress.getByName("172.67.189.191")),
         "v7.kiryuu.to" to listOf(InetAddress.getByName("104.21.69.249"), InetAddress.getByName("172.67.216.21")),
-        "kiryuu.to" to listOf(InetAddress.getByName("104.21.69.249"), InetAddress.getByName("172.67.216.21"))
+        "kiryuu.to" to listOf(InetAddress.getByName("104.21.69.249"), InetAddress.getByName("172.67.216.21")),
+        "bacakomik.my" to listOf(InetAddress.getByName("104.21.32.127"), InetAddress.getByName("172.67.151.249")),
+        "10.ikiru.wtf" to listOf(InetAddress.getByName("104.21.48.71"), InetAddress.getByName("172.67.181.50")),
+        "ikiru.id" to listOf(InetAddress.getByName("104.21.59.105"), InetAddress.getByName("172.67.223.11")),
+        "cdn.ikiru.id" to listOf(InetAddress.getByName("104.21.59.105"), InetAddress.getByName("172.67.223.11"))
     )
 
     private val BLOCKED_IPS = setOf("202.3.218.139", "180.131.144.144", "180.131.144.145", "36.86.63.181", "36.86.63.182")
@@ -105,6 +109,10 @@ object NetworkClient {
                 builder.header("Referer", "https://komikindo.ch/")
             } else if (host.contains("kiryuu")) {
                 builder.header("Referer", "https://v7.kiryuu.to/")
+            } else if (host.contains("ikiru")) {
+                builder.header("Referer", "https://10.ikiru.wtf/")
+            } else if (host.contains("bacakomik")) {
+                builder.header("Referer", "https://bacakomik.my/")
             }
             chain.proceed(builder.build())
         }
@@ -850,6 +858,10 @@ object ChapterLoader {
                         KomikindoSource.fetchChapterImages(chapterSlug)
                     group.startsWith("Kiryuu", ignoreCase = true) ->
                         KiryuuSource.fetchChapterImages(chapterSlug)
+                    group.startsWith("Ikiru", ignoreCase = true) ->
+                        IkiruSource.fetchChapterImages(chapterSlug)
+                    group.startsWith("BacaKomik", ignoreCase = true) ->
+                        BacaKomikSource.fetchChapterImages(chapterSlug)
                     else -> emptyList()
                 }
             }.getOrNull()
