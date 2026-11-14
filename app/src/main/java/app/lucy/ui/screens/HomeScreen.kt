@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package app.lucy.ui.screens
 
 import androidx.compose.foundation.background
@@ -27,9 +29,10 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -96,14 +99,14 @@ fun HomeScreen(
 
     if (loading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            LoadingIndicator(color = MaterialTheme.colorScheme.primary)
         }
         return
     }
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 28.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxSize()

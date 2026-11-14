@@ -2,33 +2,41 @@ package app.lucy.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -41,19 +49,23 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.lucy.BuildConfig
@@ -77,7 +89,6 @@ import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Public
@@ -124,41 +135,36 @@ fun SettingsScreen(
         }
     }
 
-    val cardColors = CardDefaults.cardColors(
-        containerColor = MaterialTheme.colorScheme.surfaceContainer
-    )
-    val listColors = ListItemDefaults.colors(
-        containerColor = Color.Transparent
-    )
-    val dividerColor = MaterialTheme.colorScheme.outlineVariant
+    val cardShape = RoundedCornerShape(24.dp)
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
 
     // SegmentedButton monochrome colors
     val segColors = SegmentedButtonDefaults.colors(
         activeContainerColor = MaterialTheme.colorScheme.primary,
         activeContentColor = MaterialTheme.colorScheme.onPrimary,
-        activeBorderColor = MaterialTheme.colorScheme.outline,
+        activeBorderColor = MaterialTheme.colorScheme.primary,
         inactiveContainerColor = Color.Transparent,
         inactiveContentColor = MaterialTheme.colorScheme.onSurface,
         inactiveBorderColor = MaterialTheme.colorScheme.outline
     )
 
+    val switchColors = SwitchDefaults.colors(
+        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+        checkedTrackColor = MaterialTheme.colorScheme.primary,
+        checkedBorderColor = Color.Transparent,
+        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        uncheckedBorderColor = Color.Transparent
+    )
+
+    var page by rememberSaveable { mutableStateOf<String?>(null) }
+    val listState = rememberLazyListState()
+    LaunchedEffect(page) { listState.scrollToItem(0) }
+
+    BackHandler(enabled = page != null) { page = null }
+
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Settings", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground
-                ),
-                windowInsets = WindowInsets(0)
-            )
-        },
+        contentWindowInsets = WindowInsets(0),
         snackbarHost = {
             SnackbarHost(snackbarHostState) { data ->
                 Snackbar(
@@ -171,351 +177,384 @@ fun SettingsScreen(
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp)
         ) {
-            // -- Appearance --
-            item {
-                SectionLabel("Appearance")
-                Card(colors = cardColors, shape = RoundedCornerShape(16.dp)) {
-                    ListItem(
-                        headlineContent = { Text("Theme") },
-                        leadingContent = { Icon(Icons.Outlined.Palette, null, Modifier.size(24.dp)) },
-                        supportingContent = {
-                            val themeOptions = listOf("system" to "System", "dark" to "Dark", "light" to "Light")
-                            val themeIcons = listOf(Icons.Outlined.SettingsBrightness, Icons.Outlined.DarkMode, Icons.Outlined.LightMode)
-                            SingleChoiceSegmentedButtonRow(
-                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                            ) {
-                                themeOptions.forEachIndexed { index, (key, label) ->
-                                    SegmentedButton(
-                                        selected = selectedTheme == key,
-                                        onClick = {
-                                            selectedTheme = key
-                                            userDb.setSetting("theme", key)
-                                            onThemeChange(key)
-                                        },
-                                        shape = SegmentedButtonDefaults.itemShape(index, themeOptions.size),
-                                        colors = segColors,
-                                        icon = {
-                                            SegmentedButtonDefaults.Icon(
-                                                active = selectedTheme == key,
-                                                activeContent = { Icon(Icons.Filled.Check, null, Modifier.size(SegmentedButtonDefaults.IconSize)) },
-                                                inactiveContent = { Icon(themeIcons[index], null, Modifier.size(SegmentedButtonDefaults.IconSize)) }
-                                            )
-                                        }
-                                    ) { Text(label, maxLines = 1) }
-                                }
-                            }
-                        },
-                        colors = listColors
-                    )
-                }
-            }
+            when (page) {
+                null -> {
+                    item { SettingsMainHeader(onBackClick) }
 
-            // -- Reader --
-            item {
-                SectionLabel("Reader")
-                Card(colors = cardColors, shape = RoundedCornerShape(16.dp)) {
-                    // Reader mode
-                    ListItem(
-                        headlineContent = { Text("Default Reader Mode") },
-                        leadingContent = { Icon(Icons.AutoMirrored.Outlined.MenuBook, null, Modifier.size(24.dp)) },
-                        supportingContent = {
-                            val modeOptions = listOf("webtoon" to "Webtoon", "paged" to "Paged")
-                            val modeIcons = listOf(Icons.Outlined.ViewStream, Icons.Outlined.ViewCarousel)
-                            SingleChoiceSegmentedButtonRow(
-                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                            ) {
-                                modeOptions.forEachIndexed { index, (key, label) ->
-                                    SegmentedButton(
-                                        selected = readerMode == key,
-                                        onClick = {
-                                            readerMode = key
-                                            userDb.setSetting("reader_mode", key)
-                                        },
-                                        shape = SegmentedButtonDefaults.itemShape(index, modeOptions.size),
-                                        colors = segColors,
-                                        icon = {
-                                            SegmentedButtonDefaults.Icon(
-                                                active = readerMode == key,
-                                                activeContent = { Icon(Icons.Filled.Check, null, Modifier.size(SegmentedButtonDefaults.IconSize)) },
-                                                inactiveContent = { Icon(modeIcons[index], null, Modifier.size(SegmentedButtonDefaults.IconSize)) }
-                                            )
-                                        }
-                                    ) { Text(label, maxLines = 1) }
-                                }
-                            }
-                        },
-                        colors = listColors
-                    )
-
-                    HorizontalDivider(color = dividerColor, modifier = Modifier.padding(start = 56.dp))
-
-                    // Keep screen on
-                    ListItem(
-                        headlineContent = { Text("Keep screen on") },
-                        supportingContent = { Text("Prevent screen from sleeping while reading") },
-                        leadingContent = { Icon(Icons.Outlined.Visibility, null, Modifier.size(24.dp)) },
-                        trailingContent = {
-                            Switch(
-                                checked = keepScreenOn,
-                                onCheckedChange = null,
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                                )
+                    item {
+                        SettingsGroup(shape = cardShape) {
+                            SettingsRow(
+                                icon = Icons.Outlined.Palette,
+                                title = "Appearance",
+                                subtitle = "Theme and dark mode",
+                                onClick = { page = "appearance" }
                             )
-                        },
-                        modifier = Modifier.clickable {
-                            val next = !keepScreenOn
-                            keepScreenOn = next
-                            userDb.setSetting("keep_screen_on", next.toString())
-                        },
-                        colors = listColors
-                    )
-
-                    HorizontalDivider(color = dividerColor, modifier = Modifier.padding(start = 56.dp))
-
-                    // Auto-next
-                    ListItem(
-                        headlineContent = { Text("Auto-next in Webtoon") },
-                        supportingContent = { Text("Load next chapter when scrolling to end") },
-                        leadingContent = { Icon(Icons.Outlined.SkipNext, null, Modifier.size(24.dp)) },
-                        trailingContent = {
-                            Switch(
-                                checked = autoNextWebtoon,
-                                onCheckedChange = null,
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                                )
+                            SettingsDivider(dividerColor)
+                            SettingsRow(
+                                icon = Icons.AutoMirrored.Outlined.MenuBook,
+                                title = "Reader",
+                                subtitle = "Reading mode, quality, and behavior",
+                                onClick = { page = "reader" }
                             )
-                        },
-                        modifier = Modifier.clickable {
-                            val next = !autoNextWebtoon
-                            autoNextWebtoon = next
-                            userDb.setSetting("auto_next_webtoon", next.toString())
-                        },
-                        colors = listColors
-                    )
-
-                    HorizontalDivider(color = dividerColor, modifier = Modifier.padding(start = 56.dp))
-
-                    // Image quality
-                    ListItem(
-                        headlineContent = { Text("Image Quality (MangaDex)") },
-                        leadingContent = { Icon(Icons.Outlined.Image, null, Modifier.size(24.dp)) },
-                        supportingContent = {
-                            val qualityOptions = listOf("data-saver" to "Data saver", "hd" to "HD")
-                            val qualityIcons = listOf(Icons.Outlined.Image, Icons.Outlined.HighQuality)
-                            SingleChoiceSegmentedButtonRow(
-                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                            ) {
-                                qualityOptions.forEachIndexed { index, (key, label) ->
-                                    SegmentedButton(
-                                        selected = imageQuality == key,
-                                        onClick = {
-                                            imageQuality = key
-                                            userDb.setSetting("image_quality", key)
-                                        },
-                                        shape = SegmentedButtonDefaults.itemShape(index, qualityOptions.size),
-                                        colors = segColors,
-                                        icon = {
-                                            SegmentedButtonDefaults.Icon(
-                                                active = imageQuality == key,
-                                                activeContent = { Icon(Icons.Filled.Check, null, Modifier.size(SegmentedButtonDefaults.IconSize)) },
-                                                inactiveContent = { Icon(qualityIcons[index], null, Modifier.size(SegmentedButtonDefaults.IconSize)) }
-                                            )
-                                        }
-                                    ) { Text(label, maxLines = 1) }
-                                }
-                            }
-                        },
-                        colors = listColors
-                    )
-                }
-            }
-
-            // -- Updates --
-            item {
-                SectionLabel("Updates")
-                Card(colors = cardColors, shape = RoundedCornerShape(16.dp)) {
-                    // Daily background update toggle
-                    ListItem(
-                        headlineContent = { Text("Daily background update") },
-                        supportingContent = { Text("Check followed series daily for new chapters") },
-                        leadingContent = { Icon(Icons.Outlined.Update, null, Modifier.size(24.dp)) },
-                        trailingContent = {
-                            Switch(
-                                checked = dailyUpdateEnabled,
-                                onCheckedChange = null,
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                                )
-                            )
-                        },
-                        modifier = Modifier.clickable {
-                            val next = !dailyUpdateEnabled
-                            dailyUpdateEnabled = next
-                            userDb.setSetting("daily_update_enabled", next.toString())
-                            if (next) {
-                                ChapterUpdateScheduler.scheduleDaily(context)
-                            } else {
-                                ChapterUpdateScheduler.cancel(context)
-                            }
-                        },
-                        colors = listColors
-                    )
-
-                    HorizontalDivider(color = dividerColor, modifier = Modifier.padding(start = 56.dp))
-
-                    // Check now
-                    val lastCheckFormatted = remember(lastAutoUpdateTime) {
-                        if (lastAutoUpdateTime <= 0L) "Never"
-                        else java.text.SimpleDateFormat("MMM d, HH:mm", java.util.Locale.getDefault())
-                            .format(java.util.Date(lastAutoUpdateTime))
+                        }
                     }
-                    ListItem(
-                        headlineContent = { Text("Check for updates now") },
-                        supportingContent = { Text("Last checked: $lastCheckFormatted") },
-                        leadingContent = { Icon(Icons.Filled.Refresh, null, Modifier.size(24.dp)) },
-                        modifier = Modifier.clickable {
-                            ChapterUpdateScheduler.runNow(context)
-                            scope.launch { snackbarHostState.showSnackbar("Checking updates in background...") }
-                        },
-                        colors = listColors
-                    )
-                }
-            }
 
-            // -- Storage & History --
-            item {
-                SectionLabel("Storage & History")
-                Card(colors = cardColors, shape = RoundedCornerShape(16.dp)) {
-                    ListItem(
-                        headlineContent = { Text("Clear image cache") },
-                        supportingContent = { Text("Free up cached chapter pages on device") },
-                        leadingContent = { Icon(Icons.Outlined.CleaningServices, null, Modifier.size(24.dp)) },
-                        modifier = Modifier.clickable {
-                            scope.launch {
-                                val loader = Coil.imageLoader(context)
-                                loader.memoryCache?.clear()
-                                withContext(Dispatchers.IO) { loader.diskCache?.clear() }
-                                snackbarHostState.showSnackbar("Image cache cleared")
-                            }
-                        },
-                        colors = listColors
-                    )
-
-                    HorizontalDivider(color = dividerColor, modifier = Modifier.padding(start = 56.dp))
-
-                    ListItem(
-                        headlineContent = { Text("Clear reading history") },
-                        supportingContent = { Text("Remove all entries from history shelf") },
-                        leadingContent = { Icon(Icons.Outlined.History, null, Modifier.size(24.dp)) },
-                        modifier = Modifier.clickable { showClearHistoryDialog = true },
-                        colors = listColors
-                    )
-
-                    HorizontalDivider(color = dividerColor, modifier = Modifier.padding(start = 56.dp))
-
-                    ListItem(
-                        headlineContent = { Text("Clear read markers") },
-                        supportingContent = { Text("Reset all read chapter indicators") },
-                        leadingContent = { Icon(Icons.Outlined.DoneAll, null, Modifier.size(24.dp)) },
-                        modifier = Modifier.clickable { showClearMarkersDialog = true },
-                        colors = listColors
-                    )
-                }
-            }
-
-            // -- Connect --
-            item {
-                SectionLabel("Connect")
-                Card(colors = cardColors, shape = RoundedCornerShape(16.dp)) {
-                    ListItem(
-                        headlineContent = { Text("Instagram") },
-                        supportingContent = { Text("@y1peh") },
-                        leadingContent = { Icon(Icons.Outlined.AlternateEmail, null, Modifier.size(24.dp)) },
-                        trailingContent = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null, Modifier.size(18.dp)) },
-                        modifier = Modifier.clickable { openLink("https://www.instagram.com/y1peh") },
-                        colors = listColors
-                    )
-
-                    HorizontalDivider(color = dividerColor, modifier = Modifier.padding(start = 56.dp))
-
-                    ListItem(
-                        headlineContent = { Text("Email") },
-                        supportingContent = { Text("yuiwoip@gmail.com") },
-                        leadingContent = { Icon(Icons.Filled.Email, null, Modifier.size(24.dp)) },
-                        trailingContent = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null, Modifier.size(18.dp)) },
-                        modifier = Modifier.clickable { openLink("mailto:yuiwoip@gmail.com") },
-                        colors = listColors
-                    )
-                }
-            }
-
-            // -- About --
-            item {
-                SectionLabel("About")
-                Card(colors = cardColors, shape = RoundedCornerShape(16.dp)) {
-                    ListItem(
-                        headlineContent = {
-                            Text(
-                                "lucy",
-                                fontFamily = Newsreader,
-                                fontWeight = FontWeight.Light,
-                                fontSize = 28.sp,
-                                letterSpacing = (-1).sp
+                    item {
+                        SettingsGroup(shape = cardShape) {
+                            SettingsRow(
+                                icon = Icons.Outlined.Update,
+                                title = "Updates",
+                                subtitle = "Daily chapter checks",
+                                onClick = { page = "updates" }
                             )
-                        },
-                        supportingContent = {
-                            Column {
-                                Text("Manga & Manhwa Reader")
-                                Text(
-                                    "Version $versionName (Release)",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            }
-                        },
-                        leadingContent = { Icon(Icons.Filled.Info, null, Modifier.size(24.dp)) },
-                        colors = listColors
-                    )
+                            SettingsDivider(dividerColor)
+                            SettingsRow(
+                                icon = Icons.Outlined.CleaningServices,
+                                title = "Storage & history",
+                                subtitle = "Cache, history, and read markers",
+                                onClick = { page = "storage" }
+                            )
+                            SettingsDivider(dividerColor)
+                            SettingsRow(
+                                icon = Icons.Outlined.AlternateEmail,
+                                title = "Connect",
+                                subtitle = "Instagram and email",
+                                onClick = { page = "connect" }
+                            )
+                        }
+                    }
 
-                    HorizontalDivider(color = dividerColor, modifier = Modifier.padding(start = 56.dp))
-
-                    ListItem(
-                        headlineContent = { Text("Check for app update") },
-                        supportingContent = {
-                            Text(if (checkingAppUpdate) "Checking GitHub..." else "Look for new release")
-                        },
-                        leadingContent = { Icon(Icons.Outlined.Public, null, Modifier.size(24.dp)) },
-                        modifier = Modifier.clickable {
-                            if (checkingAppUpdate) return@clickable
-                            checkingAppUpdate = true
-                            scope.launch {
-                                val result = AppUpdateChecker.checkLatest(BuildConfig.VERSION_NAME)
-                                checkingAppUpdate = false
-                                when (result) {
-                                    is UpdateCheckResult.Available -> updateDialogData = result.update
-                                    UpdateCheckResult.UpToDate ->
-                                        snackbarHostState.showSnackbar("App is up to date ($versionName)")
-                                    is UpdateCheckResult.Failed ->
-                                        snackbarHostState.showSnackbar("Couldn't check for updates. Try again or open GitHub.")
-                                }
-                            }
-                        },
-                        colors = listColors
-                    )
+                    item {
+                        SettingsGroup(shape = cardShape) {
+                            SettingsRow(
+                                icon = Icons.Filled.Info,
+                                title = "About",
+                                subtitle = "Version and app updates",
+                                onClick = { page = "about" }
+                            )
+                        }
+                    }
                 }
 
-                // Bottom spacing
-                Text("", modifier = Modifier.padding(bottom = 32.dp))
+                "appearance" -> {
+                    item { SettingsDetailHeader("Appearance") { page = null } }
+
+                    item {
+                        SettingsSection(title = "Theme", shape = cardShape) {
+                            SettingsRow(
+                                icon = Icons.Outlined.Palette,
+                                title = "Theme",
+                                subtitle = "Choose how lucy looks",
+                                supportingContent = {
+                                    val themeOptions = listOf("system" to "System", "dark" to "Dark", "light" to "Light")
+                                    val themeIcons = listOf(Icons.Outlined.SettingsBrightness, Icons.Outlined.DarkMode, Icons.Outlined.LightMode)
+                                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                                        themeOptions.forEachIndexed { index, (key, label) ->
+                                            SegmentedButton(
+                                                selected = selectedTheme == key,
+                                                onClick = {
+                                                    selectedTheme = key
+                                                    userDb.setSetting("theme", key)
+                                                    onThemeChange(key)
+                                                },
+                                                shape = SegmentedButtonDefaults.itemShape(index, themeOptions.size),
+                                                colors = segColors,
+                                                icon = {
+                                                    SegmentedButtonDefaults.Icon(
+                                                        active = selectedTheme == key,
+                                                        activeContent = { Icon(Icons.Filled.Check, null, Modifier.size(SegmentedButtonDefaults.IconSize)) },
+                                                        inactiveContent = { Icon(themeIcons[index], null, Modifier.size(SegmentedButtonDefaults.IconSize)) }
+                                                    )
+                                                }
+                                            ) { Text(label, maxLines = 1) }
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                "reader" -> {
+                    item { SettingsDetailHeader("Reader") { page = null } }
+
+                    item {
+                        SettingsSection(title = "Reading", shape = cardShape) {
+                            SettingsRow(
+                                icon = Icons.AutoMirrored.Outlined.MenuBook,
+                                title = "Default reader mode",
+                                subtitle = "Webtoon scroll or paged chapters",
+                                supportingContent = {
+                                    val modeOptions = listOf("webtoon" to "Webtoon", "paged" to "Paged")
+                                    val modeIcons = listOf(Icons.Outlined.ViewStream, Icons.Outlined.ViewCarousel)
+                                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                                        modeOptions.forEachIndexed { index, (key, label) ->
+                                            SegmentedButton(
+                                                selected = readerMode == key,
+                                                onClick = {
+                                                    readerMode = key
+                                                    userDb.setSetting("reader_mode", key)
+                                                },
+                                                shape = SegmentedButtonDefaults.itemShape(index, modeOptions.size),
+                                                colors = segColors,
+                                                icon = {
+                                                    SegmentedButtonDefaults.Icon(
+                                                        active = readerMode == key,
+                                                        activeContent = { Icon(Icons.Filled.Check, null, Modifier.size(SegmentedButtonDefaults.IconSize)) },
+                                                        inactiveContent = { Icon(modeIcons[index], null, Modifier.size(SegmentedButtonDefaults.IconSize)) }
+                                                    )
+                                                }
+                                            ) { Text(label, maxLines = 1) }
+                                        }
+                                    }
+                                }
+                            )
+
+                            SettingsDivider(dividerColor)
+
+                            SettingsRow(
+                                icon = Icons.Outlined.Visibility,
+                                title = "Keep screen on",
+                                subtitle = "Prevent sleeping while reading",
+                                trailingContent = {
+                                    Switch(checked = keepScreenOn, onCheckedChange = null, colors = switchColors)
+                                },
+                                onClick = {
+                                    val next = !keepScreenOn
+                                    keepScreenOn = next
+                                    userDb.setSetting("keep_screen_on", next.toString())
+                                }
+                            )
+
+                            SettingsDivider(dividerColor)
+
+                            SettingsRow(
+                                icon = Icons.Outlined.SkipNext,
+                                title = "Auto-next in webtoon",
+                                subtitle = "Load the next chapter at the end",
+                                trailingContent = {
+                                    Switch(checked = autoNextWebtoon, onCheckedChange = null, colors = switchColors)
+                                },
+                                onClick = {
+                                    val next = !autoNextWebtoon
+                                    autoNextWebtoon = next
+                                    userDb.setSetting("auto_next_webtoon", next.toString())
+                                }
+                            )
+
+                            SettingsDivider(dividerColor)
+
+                            SettingsRow(
+                                icon = Icons.Outlined.Image,
+                                title = "Image quality",
+                                subtitle = "MangaDex page resolution",
+                                supportingContent = {
+                                    val qualityOptions = listOf("data-saver" to "Data saver", "hd" to "HD")
+                                    val qualityIcons = listOf(Icons.Outlined.Image, Icons.Outlined.HighQuality)
+                                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                                        qualityOptions.forEachIndexed { index, (key, label) ->
+                                            SegmentedButton(
+                                                selected = imageQuality == key,
+                                                onClick = {
+                                                    imageQuality = key
+                                                    userDb.setSetting("image_quality", key)
+                                                },
+                                                shape = SegmentedButtonDefaults.itemShape(index, qualityOptions.size),
+                                                colors = segColors,
+                                                icon = {
+                                                    SegmentedButtonDefaults.Icon(
+                                                        active = imageQuality == key,
+                                                        activeContent = { Icon(Icons.Filled.Check, null, Modifier.size(SegmentedButtonDefaults.IconSize)) },
+                                                        inactiveContent = { Icon(qualityIcons[index], null, Modifier.size(SegmentedButtonDefaults.IconSize)) }
+                                                    )
+                                                }
+                                            ) { Text(label, maxLines = 1) }
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                "updates" -> {
+                    item { SettingsDetailHeader("Updates") { page = null } }
+
+                    item {
+                        SettingsSection(title = "Chapter updates", shape = cardShape) {
+                            SettingsRow(
+                                icon = Icons.Outlined.Update,
+                                title = "Daily background update",
+                                subtitle = "Check followed series every day",
+                                trailingContent = {
+                                    Switch(checked = dailyUpdateEnabled, onCheckedChange = null, colors = switchColors)
+                                },
+                                onClick = {
+                                    val next = !dailyUpdateEnabled
+                                    dailyUpdateEnabled = next
+                                    userDb.setSetting("daily_update_enabled", next.toString())
+                                    if (next) {
+                                        ChapterUpdateScheduler.scheduleDaily(context)
+                                    } else {
+                                        ChapterUpdateScheduler.cancel(context)
+                                    }
+                                }
+                            )
+
+                            SettingsDivider(dividerColor)
+
+                            val lastCheckFormatted = remember(lastAutoUpdateTime) {
+                                if (lastAutoUpdateTime <= 0L) "Never"
+                                else java.text.SimpleDateFormat("MMM d, HH:mm", java.util.Locale.getDefault())
+                                    .format(java.util.Date(lastAutoUpdateTime))
+                            }
+                            SettingsRow(
+                                icon = Icons.Filled.Refresh,
+                                title = "Check for updates now",
+                                subtitle = "Last checked: $lastCheckFormatted",
+                                onClick = {
+                                    ChapterUpdateScheduler.runNow(context)
+                                    scope.launch { snackbarHostState.showSnackbar("Checking updates in background...") }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                "storage" -> {
+                    item { SettingsDetailHeader("Storage & history") { page = null } }
+
+                    item {
+                        SettingsSection(title = "Clear data", shape = cardShape) {
+                            SettingsRow(
+                                icon = Icons.Outlined.CleaningServices,
+                                title = "Clear image cache",
+                                subtitle = "Free up cached chapter pages",
+                                onClick = {
+                                    scope.launch {
+                                        val loader = Coil.imageLoader(context)
+                                        loader.memoryCache?.clear()
+                                        withContext(Dispatchers.IO) { loader.diskCache?.clear() }
+                                        snackbarHostState.showSnackbar("Image cache cleared")
+                                    }
+                                }
+                            )
+
+                            SettingsDivider(dividerColor)
+
+                            SettingsRow(
+                                icon = Icons.Outlined.History,
+                                title = "Clear reading history",
+                                subtitle = "Remove all history shelf entries",
+                                onClick = { showClearHistoryDialog = true }
+                            )
+
+                            SettingsDivider(dividerColor)
+
+                            SettingsRow(
+                                icon = Icons.Outlined.DoneAll,
+                                title = "Clear read markers",
+                                subtitle = "Reset all read chapter indicators",
+                                onClick = { showClearMarkersDialog = true }
+                            )
+                        }
+                    }
+                }
+
+                "connect" -> {
+                    item { SettingsDetailHeader("Connect") { page = null } }
+
+                    item {
+                        SettingsSection(title = "Contact", shape = cardShape) {
+                            SettingsRow(
+                                icon = Icons.Outlined.AlternateEmail,
+                                title = "Instagram",
+                                subtitle = "@y1peh",
+                                trailingContent = {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.OpenInNew,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = { openLink("https://www.instagram.com/y1peh") }
+                            )
+
+                            SettingsDivider(dividerColor)
+
+                            SettingsRow(
+                                icon = Icons.Filled.Email,
+                                title = "Email",
+                                subtitle = "yuiwoip@gmail.com",
+                                trailingContent = {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.OpenInNew,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = { openLink("mailto:yuiwoip@gmail.com") }
+                            )
+                        }
+                    }
+                }
+
+                "about" -> {
+                    item { SettingsDetailHeader("About") { page = null } }
+
+                    item {
+                        SettingsSection(title = "Application", shape = cardShape) {
+                            SettingsRow(
+                                icon = Icons.Filled.Info,
+                                title = "lucy",
+                                titleContent = {
+                                    Text(
+                                        text = "lucy",
+                                        fontFamily = Newsreader,
+                                        fontWeight = FontWeight.Light,
+                                        fontSize = 24.sp,
+                                        letterSpacing = (-0.5).sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
+                                subtitle = "Manga & Manhwa Reader · Version $versionName"
+                            )
+
+                            SettingsDivider(dividerColor)
+
+                            SettingsRow(
+                                icon = Icons.Outlined.Public,
+                                title = "Check for app update",
+                                subtitle = if (checkingAppUpdate) "Checking GitHub..." else "Look for a new release",
+                                onClick = {
+                                    if (checkingAppUpdate) return@SettingsRow
+                                    checkingAppUpdate = true
+                                    scope.launch {
+                                        val result = AppUpdateChecker.checkLatest(BuildConfig.VERSION_NAME)
+                                        checkingAppUpdate = false
+                                        when (result) {
+                                            is UpdateCheckResult.Available -> updateDialogData = result.update
+                                            UpdateCheckResult.UpToDate ->
+                                                snackbarHostState.showSnackbar("App is up to date ($versionName)")
+                                            is UpdateCheckResult.Failed ->
+                                                snackbarHostState.showSnackbar("Couldn't check for updates. Try again or open GitHub.")
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -578,11 +617,177 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SectionLabel(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 8.dp)
+private fun SettingsMainHeader(onBackClick: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        IconButton(
+            onClick = onBackClick,
+            modifier = Modifier.offset(x = (-10).dp)
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = MaterialTheme.colorScheme.onBackground
+            )
+        }
+        Text(
+            text = "Settings",
+            style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 6.dp)
+        )
+    }
+}
+
+@Composable
+private fun SettingsDetailHeader(title: String, onBack: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier.offset(x = (-10).dp)
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = MaterialTheme.colorScheme.onBackground
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun SettingsSection(
+    title: String,
+    shape: Shape,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
+        )
+        SettingsGroup(shape = shape, content = content)
+    }
+}
+
+@Composable
+private fun SettingsGroup(
+    shape: Shape,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainer),
+        content = content
+    )
+}
+
+@Composable
+private fun SettingsRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    titleContent: (@Composable () -> Unit)? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+    supportingContent: (@Composable () -> Unit)? = null
+) {
+    val rowModifier = if (onClick != null) {
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    } else {
+        Modifier.fillMaxWidth()
+    }
+
+    Column(modifier = rowModifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(23.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                if (titleContent != null) {
+                    titleContent()
+                } else {
+                    Text(
+                        text = title,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (!subtitle.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = subtitle,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            if (trailingContent != null) {
+                Spacer(modifier = Modifier.width(12.dp))
+                Box(contentAlignment = Alignment.Center) {
+                    trailingContent()
+                }
+            }
+        }
+
+        if (supportingContent != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 14.dp)
+            ) {
+                supportingContent()
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsDivider(color: Color) {
+    HorizontalDivider(
+        color = color,
+        modifier = Modifier.padding(start = 82.dp)
     )
 }

@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package app.lucy.ui.components
 
 import android.content.Context
@@ -26,7 +28,8 @@ import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -449,13 +452,13 @@ fun UpdateDialog(
                     DownloadPhase.Verifying,
                     DownloadPhase.Installing -> {
                         if (phase == DownloadPhase.Downloading && !indeterminate) {
-                            LinearProgressIndicator(
+                            LinearWavyProgressIndicator(
                                 progress = { progress / 100f },
                                 modifier = Modifier.fillMaxWidth(),
                                 color = MaterialTheme.colorScheme.primary
                             )
                         } else {
-                            LinearProgressIndicator(
+                            LinearWavyProgressIndicator(
                                 modifier = Modifier.fillMaxWidth(),
                                 color = MaterialTheme.colorScheme.primary
                             )

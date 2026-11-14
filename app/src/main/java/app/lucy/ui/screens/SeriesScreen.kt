@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package app.lucy.ui.screens
 
 import android.widget.Toast
@@ -30,9 +32,10 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -163,7 +166,7 @@ fun SeriesScreen(
 
     if (loading || manga == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            LoadingIndicator(color = MaterialTheme.colorScheme.primary)
         }
         return
     }
@@ -199,8 +202,7 @@ fun SeriesScreen(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (isCheckingUpdates) {
-                        CircularProgressIndicator(
-                            strokeWidth = 2.dp,
+                        LoadingIndicator(
                             modifier = Modifier
                                 .size(24.dp)
                                 .padding(end = 6.dp),

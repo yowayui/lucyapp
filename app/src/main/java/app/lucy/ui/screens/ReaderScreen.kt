@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package app.lucy.ui.screens
 
 import android.app.Activity
@@ -36,10 +38,11 @@ import androidx.compose.material.icons.filled.ViewStream
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -329,7 +332,7 @@ fun ReaderScreen(
         if (loading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = Color.White)
+                    LoadingIndicator(color = Color.White)
                     Text(
                         text = "Loading chapter pages...",
                         color = Color.White.copy(alpha = 0.7f),
