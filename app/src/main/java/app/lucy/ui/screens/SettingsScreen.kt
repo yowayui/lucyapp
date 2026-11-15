@@ -107,6 +107,12 @@ import androidx.compose.material.icons.outlined.SettingsBrightness
 import androidx.compose.material.icons.outlined.ViewStream
 import androidx.compose.material.icons.outlined.ViewCarousel
 import androidx.compose.material.icons.outlined.HighQuality
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.SwapVert
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.RadioButton
+import app.lucy.ui.components.UpdateChannel
 
 @OptIn(ExperimentalMaterial3Api::class, coil.annotation.ExperimentalCoilApi::class)
 @Composable
@@ -135,6 +141,13 @@ fun SettingsScreen(
     var showLicenseDialog by remember { mutableStateOf(false) }
     var showPrivacyDialog by remember { mutableStateOf(false) }
     var showTranslationDialog by remember { mutableStateOf(false) }
+    var showChannelDialog by remember { mutableStateOf(false) }
+
+    var autoAppUpdate by remember { mutableStateOf(userDb.getSetting("app_update_auto", "true") == "true") }
+    var notifyAppUpdate by remember { mutableStateOf(userDb.getSetting("app_update_notify", "false") == "true") }
+    var updateChannelKey by remember { mutableStateOf(userDb.getSetting("app_update_channel", "stable")) }
+    var latestAppTag by remember { mutableStateOf(userDb.getSetting("app_update_latest_tag", "")) }
+    var lastAppCheck by remember { mutableStateOf(userDb.getSetting("app_update_last_check", "0").toLongOrNull() ?: 0L) }
 
     val versionName = BuildConfig.VERSION_NAME
 
@@ -143,6 +156,31 @@ fun SettingsScreen(
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         } catch (_: Exception) {
             scope.launch { snackbarHostState.showSnackbar("Could not open link") }
+        }
+    }
+
+    fun checkAppUpdate() {
+        if (checkingAppUpdate) return
+        checkingAppUpdate = true
+        scope.launch {
+            val result = AppUpdateChecker.checkLatest(versionName, UpdateChannel.fromKey(updateChannelKey))
+            checkingAppUpdate = false
+            lastAppCheck = System.currentTimeMillis()
+            userDb.setSetting("app_update_last_check", lastAppCheck.toString())
+            when (result) {
+                is UpdateCheckResult.Available -> {
+                    latestAppTag = result.update.versionName
+                    userDb.setSetting("app_update_latest_tag", latestAppTag)
+                    updateDialogData = result.update
+                }
+                is UpdateCheckResult.UpToDate -> {
+                    latestAppTag = result.latestTag
+                    userDb.setSetting("app_update_latest_tag", result.latestTag)
+                    snackbarHostState.showSnackbar("App is up to date ($versionName)")
+                }
+                is UpdateCheckResult.Failed ->
+                    snackbarHostState.showSnackbar("Couldn't check for updates. Try again or open GitHub.")
+            }
         }
     }
 
@@ -223,7 +261,22 @@ fun SettingsScreen(
                             SettingsRow(
                                 icon = Icons.Outlined.Update,
                                 title = "Updates",
-                                subtitle = "Daily chapter checks",
+                                subtitle = "Version, release notes, and channel",
+                                trailingContent = {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(50))
+                                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                                            .padding(horizontal = 12.dp, vertical = 5.dp)
+                                    ) {
+                                        Text(
+                                            text = versionName,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
                                 onClick = { page = "updates" }
                             )
                             SettingsDivider(dividerColor)
@@ -400,6 +453,157 @@ fun SettingsScreen(
                     item { SettingsDetailHeader("Updates") { page = null } }
 
                     item {
+                        Text(
+                            text = "Release builds from GitHub",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(28.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainer)
+                                .padding(20.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Update,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Current Version",
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = versionName,
+                                        fontSize = 28.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (latestAppTag.isNotBlank()) "Latest: $latestAppTag" else "Not checked yet",
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(18.dp))
+
+                            Button(
+                                onClick = { checkAppUpdate() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(50),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Update,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (checkingAppUpdate) "Checking..." else "Check for Update",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
+                    item {
+                        SettingsSection(title = "App updates", shape = cardShape) {
+                            SettingsRow(
+                                icon = Icons.Outlined.Update,
+                                title = "Automatic Updates Check",
+                                subtitle = "Check GitHub for new releases on launch",
+                                trailingContent = {
+                                    Switch(
+                                        checked = autoAppUpdate,
+                                        onCheckedChange = null,
+                                        colors = switchColors
+                                    )
+                                },
+                                onClick = {
+                                    val next = !autoAppUpdate
+                                    autoAppUpdate = next
+                                    userDb.setSetting("app_update_auto", next.toString())
+                                }
+                            )
+
+                            SettingsDivider(dividerColor)
+
+                            SettingsRow(
+                                icon = Icons.Outlined.Notifications,
+                                title = "Enable Update Notification",
+                                subtitle = "Get notified when a new release is available",
+                                trailingContent = {
+                                    Switch(
+                                        checked = notifyAppUpdate,
+                                        onCheckedChange = null,
+                                        colors = switchColors
+                                    )
+                                },
+                                onClick = {
+                                    val next = !notifyAppUpdate
+                                    notifyAppUpdate = next
+                                    userDb.setSetting("app_update_notify", next.toString())
+                                }
+                            )
+
+                            SettingsDivider(dividerColor)
+
+                            val channel = UpdateChannel.fromKey(updateChannelKey)
+                            SettingsRow(
+                                icon = Icons.Outlined.SwapVert,
+                                title = "Update Channel",
+                                subtitle = if (channel == UpdateChannel.STABLE)
+                                    "Tested releases only" else "Include development snapshots",
+                                trailingContent = {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(50))
+                                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                                            .padding(horizontal = 12.dp, vertical = 5.dp)
+                                    ) {
+                                        Text(
+                                            text = channel.label,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = { showChannelDialog = true }
+                            )
+                        }
+                    }
+
+                    item {
                         SettingsSection(title = "Chapter updates", shape = cardShape) {
                             SettingsRow(
                                 icon = Icons.Outlined.Update,
@@ -565,22 +769,7 @@ fun SettingsScreen(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(50))
                                         .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                                        .clickable {
-                                            if (!checkingAppUpdate) {
-                                                checkingAppUpdate = true
-                                                scope.launch {
-                                                    val result = AppUpdateChecker.checkLatest(BuildConfig.VERSION_NAME)
-                                                    checkingAppUpdate = false
-                                                    when (result) {
-                                                        is UpdateCheckResult.Available -> updateDialogData = result.update
-                                                        UpdateCheckResult.UpToDate ->
-                                                            snackbarHostState.showSnackbar("App is up to date ($versionName)")
-                                                        is UpdateCheckResult.Failed ->
-                                                            snackbarHostState.showSnackbar("Couldn't check for updates. Try again or open GitHub.")
-                                                    }
-                                                }
-                                            }
-                                        }
+                                        .clickable { checkAppUpdate() }
                                         .padding(horizontal = 16.dp, vertical = 6.dp)
                                 ) {
                                     Text(
@@ -696,6 +885,61 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showClearHistoryDialog = false }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showChannelDialog) {
+        AlertDialog(
+            onDismissRequest = { showChannelDialog = false },
+            icon = { Icon(Icons.Outlined.SwapVert, null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("Update Channel") },
+            text = {
+                Column {
+                    UpdateChannel.entries.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable {
+                                    updateChannelKey = option.key
+                                    userDb.setSetting("app_update_channel", option.key)
+                                    showChannelDialog = false
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = updateChannelKey == option.key,
+                                onClick = {
+                                    updateChannelKey = option.key
+                                    userDb.setSetting("app_update_channel", option.key)
+                                    showChannelDialog = false
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = option.label,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (option == UpdateChannel.STABLE)
+                                        "Tested releases only" else "Include development snapshots",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showChannelDialog = false }) {
+                    Text("Done")
                 }
             }
         )

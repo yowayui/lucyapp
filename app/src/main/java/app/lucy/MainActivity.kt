@@ -48,8 +48,10 @@ import androidx.navigation.navArgument
 import androidx.core.view.WindowCompat
 import app.lucy.ui.components.AppUpdate
 import app.lucy.ui.components.AppUpdateChecker
+import app.lucy.ui.components.AppUpdateNotifier
 import app.lucy.ui.components.LucyNavBar
 import app.lucy.ui.components.NavItem
+import app.lucy.ui.components.UpdateChannel
 import app.lucy.ui.components.UpdateCheckResult
 import app.lucy.ui.components.UpdateDialog
 import app.lucy.ui.screens.BrowseScreen
@@ -102,9 +104,19 @@ class MainActivity : ComponentActivity() {
                 var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
 
                 LaunchedEffect(Unit) {
-                    val result = AppUpdateChecker.checkLatest(BuildConfig.VERSION_NAME)
+                    val autoCheck = userDb.getSetting("app_update_auto", "true") == "true"
+                    if (!autoCheck) return@LaunchedEffect
+
+                    val notifyUpdates = userDb.getSetting("app_update_notify", "false") == "true"
+                    val channel = UpdateChannel.fromKey(userDb.getSetting("app_update_channel", "stable"))
+                    val result = AppUpdateChecker.checkLatest(BuildConfig.VERSION_NAME, channel)
                     if (result is UpdateCheckResult.Available) {
-                        availableUpdate = result.update
+                        userDb.setSetting("app_update_latest_tag", result.update.versionName)
+                        if (notifyUpdates) {
+                            AppUpdateNotifier.notify(context, result.update)
+                        } else {
+                            availableUpdate = result.update
+                        }
                     }
                 }
 

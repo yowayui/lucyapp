@@ -77,8 +77,20 @@ data class AppUpdate(
 
 sealed interface UpdateCheckResult {
     data class Available(val update: AppUpdate) : UpdateCheckResult
-    object UpToDate : UpdateCheckResult
+    data class UpToDate(val latestTag: String = "") : UpdateCheckResult
     data class Failed(val message: String? = null) : UpdateCheckResult
+}
+
+// Stable tracks the newest published release; Beta also picks up pre-releases
+// from the release feed.
+enum class UpdateChannel(val key: String, val label: String) {
+    STABLE("stable", "Stable"),
+    BETA("beta", "Beta");
+
+    companion object {
+        fun fromKey(key: String?): UpdateChannel =
+            entries.firstOrNull { it.key.equals(key, ignoreCase = true) } ?: STABLE
+    }
 }
 
 object AppUpdateChecker {
@@ -103,26 +115,26 @@ object AppUpdateChecker {
     // Releases are read from the public Atom feed because the unauthenticated
     // GitHub REST API is limited to 60 requests per hour per IP, which makes
     // update checks fail silently on shared networks.
-    suspend fun checkLatest(currentVersion: String): UpdateCheckResult = withContext(Dispatchers.IO) {
-        val atom = runCatching { fetchAtomLatest() }.getOrNull()
-        if (atom != null) {
-            return@withContext if (isNewer(atom.tag, currentVersion)) {
-                UpdateCheckResult.Available(buildUpdate(atom.tag, atom.notes))
-            } else {
-                UpdateCheckResult.UpToDate
-            }
-        }
+    suspend fun checkLatest(
+        currentVersion: String,
+        channel: UpdateChannel = UpdateChannel.STABLE
+    ): UpdateCheckResult = withContext(Dispatchers.IO) {
+        val release = runCatching { fetchRelease(channel) }.getOrNull()
+            ?: return@withContext UpdateCheckResult.Failed()
 
-        val tag = runCatching { fetchLatestTagViaRedirect() }.getOrNull()
-        if (!tag.isNullOrBlank()) {
-            return@withContext if (isNewer(tag, currentVersion)) {
-                UpdateCheckResult.Available(buildUpdate(tag, ""))
-            } else {
-                UpdateCheckResult.UpToDate
-            }
+        if (isNewer(release.tag, currentVersion)) {
+            UpdateCheckResult.Available(buildUpdate(release.tag, release.notes))
+        } else {
+            UpdateCheckResult.UpToDate(release.tag)
         }
+    }
 
-        UpdateCheckResult.Failed()
+    private fun fetchRelease(channel: UpdateChannel): AtomRelease {
+        if (channel == UpdateChannel.STABLE) {
+            val tag = runCatching { fetchLatestTagViaRedirect() }.getOrNull()
+            if (!tag.isNullOrBlank()) return AtomRelease(tag, "")
+        }
+        return fetchAtomLatest()
     }
 
     private data class AtomRelease(val tag: String, val notes: String)
