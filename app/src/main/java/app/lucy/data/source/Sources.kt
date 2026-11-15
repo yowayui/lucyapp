@@ -34,6 +34,10 @@ object NetworkClient {
         "mkissa.to" to listOf(InetAddress.getByName("172.67.187.90"), InetAddress.getByName("104.21.56.175")),
         "api.mkissa.net" to listOf(InetAddress.getByName("172.67.187.90"), InetAddress.getByName("104.21.56.175")),
         "cdn.mkissa.net" to listOf(InetAddress.getByName("172.67.187.90"), InetAddress.getByName("104.21.56.175")),
+        "doujinku.org" to listOf(InetAddress.getByName("104.21.75.106"), InetAddress.getByName("172.67.221.88")),
+        "komikdewasa.art" to listOf(InetAddress.getByName("104.21.76.105"), InetAddress.getByName("172.67.193.15")),
+        "warungkomikcdn.icu" to listOf(InetAddress.getByName("104.21.67.240"), InetAddress.getByName("172.67.182.250")),
+        "warungkomik.icu" to listOf(InetAddress.getByName("104.21.67.240"), InetAddress.getByName("172.67.182.250")),
         "wp.youtube-anime.com" to listOf(InetAddress.getByName("104.21.86.174"), InetAddress.getByName("172.67.223.73")),
         "ytimgf.youtube-anime.com" to listOf(InetAddress.getByName("104.21.86.174"), InetAddress.getByName("172.67.223.73")),
         "s4.anilist.co" to listOf(InetAddress.getByName("104.26.14.71"), InetAddress.getByName("104.26.15.71"), InetAddress.getByName("172.67.71.232")),
@@ -101,6 +105,10 @@ object NetworkClient {
                 builder.header("Referer", "https://dojing.net/")
             } else if (host.contains("shirodoujin")) {
                 builder.header("Referer", "https://shirodoujin.com/")
+            } else if (host.contains("doujinku")) {
+                builder.header("Referer", "https://doujinku.org/")
+            } else if (host.contains("komikdewasa") || host.contains("warungkomik")) {
+                builder.header("Referer", "https://komikdewasa.art/")
             } else if (host.contains("mkissa") || host.contains("youtube-anime")) {
                 builder.header("Referer", "https://mkissa.to/")
             } else if (host.contains("komiku")) {
@@ -826,9 +834,43 @@ object ShiroSource {
         val html = NetworkClient.okHttp.newCall(req).execute().use { it.body?.string().orEmpty() }
         val doc = Jsoup.parse(html, url)
         val list = mutableListOf<String>()
-        for (img in doc.select("#readerarea img, .reading-content img")) {
+        for (img in doc.select(".reader-area img, #readerarea img, .reading-content img")) {
             val src = img.attr("data-src").ifBlank { img.attr("src") }
             if (src.isNotBlank() && !src.contains("placeholder") && !src.contains("logo")) {
+                list.add(src)
+            }
+        }
+        return list
+    }
+}
+
+object DoujinkuSource {
+    fun fetchChapterImages(slug: String): List<String> {
+        val url = "https://doujinku.org/$slug/"
+        val req = Request.Builder().url(url).build()
+        val html = NetworkClient.okHttp.newCall(req).execute().use { it.body?.string().orEmpty() }
+        val doc = Jsoup.parse(html, url)
+        val list = mutableListOf<String>()
+        for (img in doc.select("#readerarea img, .reader-area img")) {
+            val src = img.attr("data-src").ifBlank { img.attr("src") }
+            if (src.isNotBlank() && !src.contains("placeholder") && !src.contains("logo") && !src.contains("readerarea.svg")) {
+                list.add(src)
+            }
+        }
+        return list
+    }
+}
+
+object KomikDewasaSource {
+    fun fetchChapterImages(slug: String): List<String> {
+        val url = "https://komikdewasa.art/$slug/"
+        val req = Request.Builder().url(url).build()
+        val html = NetworkClient.okHttp.newCall(req).execute().use { it.body?.string().orEmpty() }
+        val doc = Jsoup.parse(html, url)
+        val list = mutableListOf<String>()
+        for (img in doc.select("#readerarea img, .reader-area img")) {
+            val src = img.attr("data-src").ifBlank { img.attr("src") }
+            if (src.isNotBlank() && !src.contains("placeholder") && !src.contains("logo") && !src.contains("readerarea.svg")) {
                 list.add(src)
             }
         }
@@ -877,6 +919,18 @@ object ChapterLoader {
         // 2. ShiroDoujin
         if (group.equals("ShiroDoujin", ignoreCase = true)) {
             val imgs = runCatching { ShiroSource.fetchChapterImages(chapterSlug) }.getOrNull()
+            if (!imgs.isNullOrEmpty()) return imgs
+        }
+
+        // 3. Doujinku
+        if (group.equals("Doujinku", ignoreCase = true)) {
+            val imgs = runCatching { DoujinkuSource.fetchChapterImages(chapterSlug) }.getOrNull()
+            if (!imgs.isNullOrEmpty()) return imgs
+        }
+
+        // 4. KomikDewasa
+        if (group.equals("KomikDewasa", ignoreCase = true)) {
+            val imgs = runCatching { KomikDewasaSource.fetchChapterImages(chapterSlug) }.getOrNull()
             if (!imgs.isNullOrEmpty()) return imgs
         }
 

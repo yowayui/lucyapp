@@ -47,8 +47,7 @@ class ChapterUpdateWorker(
 
         for (slug in slugsToCheck) {
             val item = catalogDb.getBySlug(slug) ?: continue
-            val group = item.sourceGroup
-            if (group.equals("Dojing", ignoreCase = true) || group.equals("ShiroDoujin", ignoreCase = true)) {
+            if (item.isNsfw) {
                 userDb.markSeriesChecked(slug, 0)
                 continue
             }

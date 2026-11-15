@@ -60,7 +60,8 @@ fun BrowseScreen(
         "Psychological", "Reincarnation", "Romance", "School", "Sci-Fi",
         "Seinen", "Shoujo", "Shoujo Ai", "Shounen", "Shounen Ai",
         "Slice of Life", "Sports", "Super Power", "Supernatural",
-        "Survival", "Thriller", "Tragedy", "Vampire", "Webtoons", "Yaoi", "Yuri"
+        "Survival", "Thriller", "Tragedy", "Vampire", "Webtoons", "Yaoi", "Yuri",
+        "18+"
     )
 
     var selectedType by rememberSaveable { mutableStateOf("All") }
@@ -205,7 +206,13 @@ fun BrowseScreen(
                             if (isSelected) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.surfaceVariant
                         )
-                        .clickable { selectedGenre = genre }
+                        .clickable {
+                            selectedGenre = genre
+                            if (genre == "18+") {
+                                selectedType = "All"
+                                selectedLanguage = "All"
+                            }
+                        }
                         .padding(horizontal = 14.dp, vertical = 6.dp)
                 ) {
                     Text(

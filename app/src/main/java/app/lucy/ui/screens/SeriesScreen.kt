@@ -122,10 +122,7 @@ fun SeriesScreen(
         loading = false
 
         val target = loadedManga
-        if (target != null &&
-            !target.sourceGroup.equals("Dojing", ignoreCase = true) &&
-            !target.sourceGroup.equals("ShiroDoujin", ignoreCase = true)
-        ) {
+        if (target != null && !target.isNsfw) {
             val lastChecked = withContext(Dispatchers.IO) { userDb.getSeriesLastChecked(slug) }
             val ttl = 12 * 60 * 60 * 1000L // 12 hours
             if (System.currentTimeMillis() - lastChecked > ttl) {

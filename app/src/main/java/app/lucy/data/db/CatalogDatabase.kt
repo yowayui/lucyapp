@@ -17,6 +17,9 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
         private const val DB_NAME = "lucy_catalog.db"
         private const val PREFS_NAME = "catalog_db"
         private const val KEY_VERSION = "catalog_version"
+        private const val KEY_CATALOG_REVISION = "catalog_revision"
+        private const val CURRENT_CATALOG_REVISION = 17 // bump whenever bundled asset changes
+
         @Volatile
         private var instance: CatalogDatabase? = null
 
@@ -29,9 +32,11 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
                     // copy from a previous install must be replaced after an update.
                     val bundledVersion = BuildConfig.VERSION_CODE
                     val installedVersion = prefs.getInt(KEY_VERSION, 0)
+                    val installedRevision = prefs.getInt(KEY_CATALOG_REVISION, 0)
                     val needsCopy = !dbFile.exists() ||
                         dbFile.length() < 1000 ||
-                        installedVersion != bundledVersion
+                        installedVersion != bundledVersion ||
+                        installedRevision != CURRENT_CATALOG_REVISION
                     if (needsCopy) {
                         dbFile.parentFile?.mkdirs()
                         dbFile.delete()
@@ -40,7 +45,10 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
                                 input.copyTo(output, bufferSize = 256 * 1024)
                             }
                         }
-                        prefs.edit().putInt(KEY_VERSION, bundledVersion).apply()
+                        prefs.edit()
+                            .putInt(KEY_VERSION, bundledVersion)
+                            .putInt(KEY_CATALOG_REVISION, CURRENT_CATALOG_REVISION)
+                            .apply()
                     }
                     val sqliteDb = SQLiteDatabase.openDatabase(
                         dbFile.path,
@@ -185,12 +193,17 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
 
         conditions.add("thumb IS NOT NULL AND thumb != ''")
 
-        if (!type.isNullOrBlank() && !type.equals("All", ignoreCase = true)) {
+        val adultShelf = genre.equals("18+", ignoreCase = true)
+
+        if (!adultShelf && !type.isNullOrBlank() && !type.equals("All", ignoreCase = true)) {
             conditions.add("type = ? COLLATE NOCASE")
             args.add(type)
         }
 
-        if (!genre.isNullOrBlank() && !genre.equals("All", ignoreCase = true)) {
+        if (adultShelf) {
+            // Curated 18+ shelf: adult doujinshi from Dojing, ShiroDoujin, Doujinku, KomikDewasa.
+            conditions.add("is_nsfw = 1 AND source_group IN ('Dojing', 'ShiroDoujin', 'Doujinku', 'KomikDewasa')")
+        } else if (!genre.isNullOrBlank() && !genre.equals("All", ignoreCase = true)) {
             conditions.add("genres LIKE ?")
             args.add("%$genre%")
         }
@@ -198,14 +211,15 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
         // ponytail: language filter via source_group suffix convention.
         // English sources have no suffix; Indonesian sources end with "-ID".
         // Upgrade path: add a dedicated `language` column when more locales are scraped.
-        if (!language.isNullOrBlank() && !language.equals("All", ignoreCase = true)) {
+        // The 18+ shelf spans both sources, so it ignores the language filter.
+        if (!adultShelf && !language.isNullOrBlank() && !language.equals("All", ignoreCase = true)) {
             when (language.uppercase()) {
                 "ID" -> conditions.add("source_group LIKE '%-ID'")
                 "EN" -> conditions.add("source_group NOT LIKE '%-ID'")
             }
         }
 
-        if (!includeNsfw) {
+        if (!adultShelf && !includeNsfw) {
             conditions.add("is_nsfw = 0 AND type != 'Doujinshi'")
         }
 
@@ -271,7 +285,7 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
         return list
     }
 
-    fun search(query: String, limit: Int = 50, includeNsfw: Boolean = true): List<MangaItem> {
+    fun search(query: String, limit: Int = 50, includeNsfw: Boolean = false): List<MangaItem> {
         val cleanQ = query.trim().replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
         val tokens = cleanQ.split("\\s+".toRegex()).filter { it.isNotBlank() }
         if (tokens.isEmpty()) return emptyList()
@@ -297,7 +311,8 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
             }
         } catch (e: Exception) {
             // Fallback to simple LIKE query if FTS expression has syntax quirk
-            val fallbackSql = "SELECT * FROM catalog WHERE (title LIKE ? OR english_name LIKE ? OR native_name LIKE ?) $nsfwClause ORDER BY (thumb IS NOT NULL AND thumb != '') DESC, score DESC LIMIT ?"
+            val fallbackNsfw = if (!includeNsfw) "AND is_nsfw = 0" else ""
+            val fallbackSql = "SELECT * FROM catalog WHERE (title LIKE ? OR english_name LIKE ? OR native_name LIKE ?) $fallbackNsfw ORDER BY (thumb IS NOT NULL AND thumb != '') DESC, score DESC LIMIT ?"
             db.rawQuery(fallbackSql, arrayOf("%$query%", "%$query%", "%$query%", limit.toString())).use { cursor ->
                 while (cursor.moveToNext()) {
                     list.add(mapRow(cursor))
@@ -357,11 +372,14 @@ class CatalogDatabase private constructor(private val db: SQLiteDatabase) {
                             }
                         }
                         return rawList.map { num ->
-                            if (group == "Dojing" || group == "ShiroDoujin") {
+                            if (group == "Dojing" || group == "ShiroDoujin" || group == "Doujinku" || group == "KomikDewasa") {
+                                val extracted = Regex("""chapter[-_]?([0-9]+(?:\.[0-9]+)?)""", RegexOption.IGNORE_CASE)
+                                    .find(num)?.groupValues?.getOrNull(1)
                                 Chapter(
-                                    title = num.replace("-", " ").capitalizeWords(),
+                                    title = if (extracted != null) "Chapter $extracted"
+                                            else num.replace("-", " ").capitalizeWords(),
                                     slug = num,
-                                    number = num
+                                    number = extracted ?: num
                                 )
                             } else {
                                 Chapter(

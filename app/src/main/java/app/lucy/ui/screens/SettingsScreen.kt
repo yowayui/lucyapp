@@ -68,6 +68,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.Lock
+import app.lucy.R
 import app.lucy.BuildConfig
 import app.lucy.data.db.UserDatabase
 import app.lucy.data.update.ChapterUpdateScheduler
@@ -124,6 +132,9 @@ fun SettingsScreen(
     var showClearMarkersDialog by remember { mutableStateOf(false) }
     var updateDialogData by remember { mutableStateOf<AppUpdate?>(null) }
     var checkingAppUpdate by remember { mutableStateOf(false) }
+    var showLicenseDialog by remember { mutableStateOf(false) }
+    var showPrivacyDialog by remember { mutableStateOf(false) }
+    var showTranslationDialog by remember { mutableStateOf(false) }
 
     val versionName = BuildConfig.VERSION_NAME
 
@@ -510,49 +521,147 @@ fun SettingsScreen(
                 }
 
                 "about" -> {
-                    item { SettingsDetailHeader("About") { page = null } }
+                    item { AboutHeader(onBack = { page = null }) }
 
                     item {
-                        SettingsSection(title = "Application", shape = cardShape) {
-                            SettingsRow(
-                                icon = Icons.Filled.Info,
-                                title = "lucy",
-                                titleContent = {
-                                    Text(
-                                        text = "lucy",
-                                        fontFamily = Newsreader,
-                                        fontWeight = FontWeight.Light,
-                                        fontSize = 24.sp,
-                                        letterSpacing = (-0.5).sp,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                },
-                                subtitle = "Manga & Manhwa Reader · Version $versionName"
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(32.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainer)
+                                .padding(horizontal = 20.dp, vertical = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(104.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF111111)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(R.drawable.ic_launcher_foreground),
+                                    contentDescription = "Lucy",
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Text(
+                                text = "Lucy",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
 
-                            SettingsDivider(dividerColor)
+                            Spacer(modifier = Modifier.height(10.dp))
 
-                            SettingsRow(
-                                icon = Icons.Outlined.Public,
-                                title = "Check for app update",
-                                subtitle = if (checkingAppUpdate) "Checking GitHub..." else "Look for a new release",
-                                onClick = {
-                                    if (checkingAppUpdate) return@SettingsRow
-                                    checkingAppUpdate = true
-                                    scope.launch {
-                                        val result = AppUpdateChecker.checkLatest(BuildConfig.VERSION_NAME)
-                                        checkingAppUpdate = false
-                                        when (result) {
-                                            is UpdateCheckResult.Available -> updateDialogData = result.update
-                                            UpdateCheckResult.UpToDate ->
-                                                snackbarHostState.showSnackbar("App is up to date ($versionName)")
-                                            is UpdateCheckResult.Failed ->
-                                                snackbarHostState.showSnackbar("Couldn't check for updates. Try again or open GitHub.")
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                                        .clickable {
+                                            if (!checkingAppUpdate) {
+                                                checkingAppUpdate = true
+                                                scope.launch {
+                                                    val result = AppUpdateChecker.checkLatest(BuildConfig.VERSION_NAME)
+                                                    checkingAppUpdate = false
+                                                    when (result) {
+                                                        is UpdateCheckResult.Available -> updateDialogData = result.update
+                                                        UpdateCheckResult.UpToDate ->
+                                                            snackbarHostState.showSnackbar("App is up to date ($versionName)")
+                                                        is UpdateCheckResult.Failed ->
+                                                            snackbarHostState.showSnackbar("Couldn't check for updates. Try again or open GitHub.")
+                                                    }
+                                                }
+                                            }
                                         }
-                                    }
+                                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = if (checkingAppUpdate) "Checking..." else versionName,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                            )
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = "UNIVERSAL",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            val buttonBorder = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            val buttonBg = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.35f)
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                AboutActionButton(
+                                    label = "GitHub",
+                                    iconRes = R.drawable.ic_github,
+                                    modifier = Modifier.weight(1f),
+                                    border = buttonBorder,
+                                    bg = buttonBg,
+                                    onClick = { openLink("https://github.com/yowayui/lucyapp") }
+                                )
+                                AboutActionButton(
+                                    label = "Privacy",
+                                    iconVector = Icons.Outlined.Lock,
+                                    modifier = Modifier.weight(1f),
+                                    border = buttonBorder,
+                                    bg = buttonBg,
+                                    onClick = { showPrivacyDialog = true }
+                                )
+                            }
                         }
+                    }
+
+                    item {
+                        AboutNavigationCard(
+                            iconVector = Icons.Outlined.Translate,
+                            title = "Contributor Translation",
+                            onClick = { showTranslationDialog = true }
+                        )
+                    }
+
+                    item {
+                        AboutNavigationCard(
+                            iconVector = Icons.Filled.Info,
+                            title = "LICENSE",
+                            onClick = { showLicenseDialog = true }
+                        )
+                    }
+
+                    item {
+                        AboutSectionTitle("Lead Developer")
+                        AboutMemberCard(
+                            avatarRes = R.drawable.about_dev,
+                            name = "yowayui",
+                            role = "Lead Developer",
+                            githubUrl = "https://github.com/yowayui",
+                            webUrl = "https://github.com/yowayui/lucyapp",
+                            contactUrl = "https://www.instagram.com/y1peh",
+                            onOpenLink = { url -> openLink(url) }
+                        )
                     }
                 }
             }
@@ -592,23 +701,71 @@ fun SettingsScreen(
         )
     }
 
-    if (showClearMarkersDialog) {
+    if (showLicenseDialog) {
         AlertDialog(
-            onDismissRequest = { showClearMarkersDialog = false },
-            icon = { Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Clear Read Markers") },
-            text = { Text("Are you sure you want to reset all read chapter markers?") },
+            onDismissRequest = { showLicenseDialog = false },
+            icon = { Icon(Icons.Filled.Info, null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("LICENSE") },
+            text = {
+                Text(
+                    "Lucy Manga & Manhwa Reader\n\n" +
+                    "Copyright (c) 2026 yowayui.\nAll rights reserved.\n\n" +
+                    "This software and its associated documentation files are distributed " +
+                    "for personal reading and offline manga catalog access."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showLicenseDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    if (showPrivacyDialog) {
+        AlertDialog(
+            onDismissRequest = { showPrivacyDialog = false },
+            icon = { Icon(Icons.Outlined.Lock, null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("Privacy Policy") },
+            text = {
+                Text(
+                    "Lucy is designed with privacy as a fundamental principle:\n\n" +
+                    "• No accounts or personal data collection.\n" +
+                    "• Zero telemetry, tracking, or ads.\n" +
+                    "• Reading history and bookmarks remain strictly on your local device storage.\n" +
+                    "• Network access is only used to query chapters and manga pages on-demand."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showPrivacyDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    if (showTranslationDialog) {
+        AlertDialog(
+            onDismissRequest = { showTranslationDialog = false },
+            icon = { Icon(Icons.Outlined.Translate, null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("Contributor Translation") },
+            text = {
+                Text(
+                    "Help make Lucy accessible to readers worldwide! " +
+                    "Translations and localization contributions are managed via GitHub.\n\n" +
+                    "Would you like to visit the repository?"
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    userDb.clearReadChapters()
-                    showClearMarkersDialog = false
-                    scope.launch { snackbarHostState.showSnackbar("Read markers reset") }
+                    showTranslationDialog = false
+                    openLink("https://github.com/yowayui/lucyapp")
                 }) {
-                    Text("Reset", color = MaterialTheme.colorScheme.error)
+                    Text("GitHub")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showClearMarkersDialog = false }) {
+                TextButton(onClick = { showTranslationDialog = false }) {
                     Text("Cancel")
                 }
             }
@@ -790,4 +947,216 @@ private fun SettingsDivider(color: Color) {
         color = color,
         modifier = Modifier.padding(start = 82.dp)
     )
+}
+
+@Composable
+private fun AboutHeader(onBack: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier.offset(x = (-10).dp)
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = MaterialTheme.colorScheme.onBackground
+            )
+        }
+        Text(
+            text = "About",
+            style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun AboutActionButton(
+    label: String,
+    modifier: Modifier = Modifier,
+    iconVector: ImageVector? = null,
+    iconRes: Int? = null,
+    border: BorderStroke,
+    bg: Color,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .height(44.dp)
+            .clip(RoundedCornerShape(50))
+            .border(border, RoundedCornerShape(50))
+            .background(bg)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            if (iconRes != null) {
+                Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(18.dp)
+                )
+            } else if (iconVector != null) {
+                Icon(
+                    imageVector = iconVector,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+private fun AboutNavigationCard(
+    iconVector: ImageVector,
+    title: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = iconVector,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
+private fun AboutSectionTitle(title: String) {
+    Text(
+        text = title,
+        fontSize = 15.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 2.dp)
+    )
+}
+
+@Composable
+private fun AboutMemberCard(
+    avatarRes: Int,
+    name: String,
+    role: String,
+    githubUrl: String? = null,
+    webUrl: String? = null,
+    contactUrl: String? = null,
+    onOpenLink: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            painter = painterResource(avatarRes),
+            contentDescription = name,
+            modifier = Modifier
+                .size(54.dp)
+                .clip(CircleShape)
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = role,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            githubUrl?.let { url ->
+                AboutCircleIconButton(iconRes = R.drawable.ic_github) { onOpenLink(url) }
+            }
+            webUrl?.let { url ->
+                AboutCircleIconButton(iconVector = Icons.Outlined.Public) { onOpenLink(url) }
+            }
+            contactUrl?.let { url ->
+                AboutCircleIconButton(iconVector = Icons.Outlined.AlternateEmail) { onOpenLink(url) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AboutCircleIconButton(
+    iconVector: ImageVector? = null,
+    iconRes: Int? = null,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (iconRes != null) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(18.dp)
+            )
+        } else if (iconVector != null) {
+            Icon(
+                imageVector = iconVector,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
 }
